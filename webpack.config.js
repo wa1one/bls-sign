@@ -6,7 +6,7 @@ module.exports = {
     filename: 'index.js',
     path: path.resolve(__dirname, 'dist'),
     library: 'bls-sign',
-    libraryTarget: 'commonjs2'
+    libraryTarget: 'umd'
   },
   externals: {
     "big-integer": "big-integer"
