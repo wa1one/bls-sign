@@ -1,14 +1,13 @@
-const { Field, Fp2, Fp6, Fp12 } = require('alg-field')
+const { Field, Fp2, Fp6, Fp12 } = require('@wa1one/alg-field')
 const { BN128Fp, BN128Fp2 } = require('./src/pairing/BN128')
 const { PairingCheck } = require('./src/pairing/PairingCheck')
-
-const Pairing = require('./src/pairing/Pairing')
 
 const {
     BLSSigner,
     BLSSecretKey,
     BLSSignature,
     BLSPublicKey,
+    BLSPolynomial,
     Parameters,
 } = require('./src')
 
@@ -126,6 +125,67 @@ describe('Curves', function () {
 
         expect(pair.eq(pc.result())).toBeTruthy()
     })
+
+    const G2_GENERATOR = [
+        10857046999023057135944570762232829481370756359578518086990519993285655852781n,
+        11559732032986387107991004021392285783925812861821192530917403151452391805634n,
+        8495653923123431417604973247489272438418190587263600148770280649306958101930n,
+        4082367875863433681332203403145435568316851327593401208105741076214120093531n,
+    ]
+
+    test('create() rejects a point not on the curve', function () {
+        expect(BN128Fp.create(1n, 3n)).toBeNull()
+    })
+
+    test('the zero point handles affine conversion without throwing', function () {
+        expect(() => BN128Fp.ZERO.toAffine()).not.toThrow()
+        expect(BN128Fp.ZERO.toAffine().isZero()).toBeTruthy()
+        expect(BN128Fp.ZERO.toEthNotation().isZero()).toBeTruthy()
+
+        // BN128Fp2.toAffine() used to call the undeclared local `zero` as a
+        // function and crash with a TDZ ReferenceError
+        expect(() => BN128Fp2.ZERO.toAffine()).not.toThrow()
+        expect(BN128Fp2.ZERO.toAffine().isZero()).toBeTruthy()
+        expect(BN128Fp2.ZERO.toEthNotation().isZero()).toBeTruthy()
+    })
+
+    test('isOnCurve/isValid accept valid points', function () {
+        const G = BN128Fp.create(1n, 2n)
+        expect(G.isOnCurve()).toBeTruthy()
+        expect(G.isValid()).toBeTruthy()
+
+        const G2 = BN128Fp2.create(...G2_GENERATOR)
+        expect(G2.isOnCurve()).toBeTruthy()
+        expect(G2.isValid()).toBeTruthy()
+    })
+
+    test('neg() produces the additive inverse', function () {
+        const G = BN128Fp.create(1n, 2n)
+        expect(G.add(G.neg()).isZero()).toBeTruthy()
+
+        const G2 = BN128Fp2.create(...G2_GENERATOR)
+        expect(G2.add(G2.neg()).isZero()).toBeTruthy()
+    })
+
+    test('multiply by 0 yields the identity point', function () {
+        const G = BN128Fp.create(1n, 2n)
+        expect(G.multiply(0n).isZero()).toBeTruthy()
+
+        const G2 = BN128Fp2.create(...G2_GENERATOR)
+        expect(G2.multiply(0n).isZero()).toBeTruthy()
+    })
+
+    test('point equality is invariant to Jacobian z-scaling', function () {
+        const G = BN128Fp.create(1n, 2n)
+
+        // these two compute the same affine point via different arithmetic
+        // paths, so they end up with different z-coordinates
+        const direct = G.multiply(5n)
+        const viaAddition = G.multiply(2n).add(G.multiply(3n))
+
+        expect(direct.z.eq(viaAddition.z)).toBeFalsy()
+        expect(direct.eq(viaAddition)).toBeTruthy()
+    })
 })
 
 describe('Signatures', function () {
@@ -174,6 +234,17 @@ describe('Signatures', function () {
         expect(signer.verify(Q, H, sQ, sH2)).toBeFalsy()
     })
 
+    test('getPublicKey derives the same key as the BLSPublicKey constructor', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+
+        const secretKey = new BLSSecretKey(2)
+        const viaMethod = secretKey.getPublicKey(Q)
+        const viaConstructor = new BLSPublicKey(secretKey, Q)
+
+        expect(viaMethod.sQ.eq(viaConstructor.sQ)).toBeTruthy()
+    })
+
     test('Threshold signatures test', function () {
         /*
          * Start testing threshold signature (k, n) - (3, 5)
@@ -193,6 +264,7 @@ describe('Signatures', function () {
 
         const sig0 = prv0.sign(H)
         const pub0 = new BLSPublicKey(prv0, Q)
+        expect(signer.verify(Q, H, pub0, sig0)).toBeTruthy()
 
         const vec = prv0.share(n, k)
 
@@ -203,7 +275,7 @@ describe('Signatures', function () {
             signVec[i] = vec[i].sign(H)
 
             const pub = new BLSPublicKey(vec[i], Q)
-            if (pub == pub0) {
+            if (pub.sQ.eq(pub0.sQ)) {
                 throw new Error('error pub key')
             }
             expect(signer.verify(Q, H, pub, signVec[i])).toBeTruthy()
@@ -226,5 +298,68 @@ describe('Signatures', function () {
         prv = new BLSSecretKey()
         prv.recover(prvVec)
         expect(prv.s).not.toEqual(prv0.s)
+    })
+})
+
+describe('BLSPolynomial', function () {
+    test('eval evaluates the sharing polynomial at a given point', function () {
+        // f(x) = 7 + 3x + 2x^2
+        const msk = [{ s: 7n }, { s: 3n }, { s: 2n }]
+
+        expect(BLSPolynomial.eval(msk, 0n)).toEqual(7n)
+        expect(BLSPolynomial.eval(msk, 1n)).toEqual(12n)
+        expect(BLSPolynomial.eval(msk, 2n)).toEqual(21n)
+    })
+
+    test('calcDelta rejects fewer than 2 ids and duplicate ids', function () {
+        expect(() => BLSPolynomial.calcDelta([1])).toThrow()
+        expect(() => BLSPolynomial.calcDelta([1, 1])).toThrow()
+    })
+
+    test('getMasterSecretKey validates k and keeps the original key as the constant term', function () {
+        expect(() => new BLSSecretKey(5).getMasterSecretKey(1)).toThrow()
+        expect(() => new BLSSecretKey(5).getMasterSecretKey(0)).toThrow()
+
+        const sk = new BLSSecretKey(5)
+        const msk = sk.getMasterSecretKey(3)
+        expect(msk).toHaveLength(3)
+        expect(msk[0]).toBe(sk)
+    })
+})
+
+describe('Threshold signature aggregation', function () {
+    test('3-of-5 and 5-of-5 recovered signatures equal the original signature and verify', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+        const H = signer.getRandomPointOnEt()
+
+        const prv0 = new BLSSecretKey()
+        const pub0 = new BLSPublicKey(prv0, Q)
+        const directSig = prv0.sign(H)
+
+        const vec = prv0.share(5, 3)
+
+        const signVec3 = vec.slice(0, 3).map((share) => share.sign(H))
+        const recovered3 = new BLSSignature().recover(signVec3)
+        expect(recovered3.sH.eq(directSig.sH)).toBeTruthy()
+        expect(signer.verify(Q, H, pub0, recovered3)).toBeTruthy()
+
+        const signVec5 = vec.map((share) => share.sign(H))
+        const recovered5 = new BLSSignature().recover(signVec5)
+        expect(recovered5.sH.eq(directSig.sH)).toBeTruthy()
+    })
+
+    test('2-of-5 (below threshold) does not recover the original signature', function () {
+        const signer = new BLSSigner(256)
+        const H = signer.getRandomPointOnEt()
+
+        const prv0 = new BLSSecretKey()
+        const directSig = prv0.sign(H)
+
+        const vec = prv0.share(5, 3)
+        const signVec2 = vec.slice(0, 2).map((share) => share.sign(H))
+        const recovered2 = new BLSSignature().recover(signVec2)
+
+        expect(recovered2.sH.eq(directSig.sH)).toBeFalsy()
     })
 })

@@ -1,6 +1,5 @@
 const crypto = require('bigint-crypto-utils')
 const { Parameters } = require('@wa1one/alg-field')
-const { Point2 } = require('@wa1one/alg-bn')
 
 const { BN128Fp, BN128Fp2 } = require('./pairing/BN128')
 const { PairingCheck } = require('./pairing/PairingCheck')
@@ -18,10 +17,8 @@ class BLSSecretKey {
 
     toString = () => this.s.toString()
 
-    getPublicKey() {
-        const pk = new BLSPublicKey()
-        pk.init(this.s)
-        return pk
+    getPublicKey(Q) {
+        return new BLSPublicKey(this, Q)
     }
 
     sign(H) {
@@ -68,8 +65,8 @@ class BLSSecretKey {
 
 /** Class representing authentic signature */
 class BLSSignature {
-    recover(signVec, Et) {
-        this.sH = BLSPolynomial.lagrange(signVec, Et)
+    recover(signVec) {
+        this.sH = BLSPolynomial.lagrange(signVec)
         return this
     }
 
@@ -130,16 +127,27 @@ class BLSPolynomial {
         return delta
     }
 
-    static lagrange(vec, Et) {
+    static lagrange(vec) {
         let S = new Array(vec.length)
         for (let i = 0; i < vec.length; i++) {
             S[i] = vec[i].id
         }
         const delta = BLSPolynomial.calcDelta(S)
-        let r = vec[0].s ? 0n : new Point2(Et)
 
+        if (vec[0].s !== undefined) {
+            let r = 0n
+            for (let i = 0; i < delta.length; i++) {
+                r += vec[i].s * delta[i]
+            }
+            return r
+        }
+
+        let r = vec[0].sH.constructor.ZERO
         for (let i = 0; i < delta.length; i++) {
-            r += vec[i].s ? vec[i].s * delta[i] : vec[i].sH * delta[i]
+            const d = delta[i]
+            const term =
+                d < 0n ? vec[i].sH.multiply(-d).neg() : vec[i].sH.multiply(d)
+            r = r.add(term)
         }
         return r
     }

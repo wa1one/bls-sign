@@ -156,9 +156,9 @@ class BN128Fp {
     isValid() {
         // check whether coordinates belongs to the Field
         if (
-            (!this.x) instanceof Field ||
-            (!this.y) instanceof Field ||
-            (!this.z) instanceof Field
+            !(this.x instanceof Field) ||
+            !(this.y instanceof Field) ||
+            !(this.z instanceof Field)
         ) {
             return false
         }
@@ -174,11 +174,13 @@ class BN128Fp {
     eq(o) {
         if (this === o) return true
         if (!(o instanceof BN128Fp)) return false
+        if (this.isZero() || o.isZero()) return this.isZero() === o.isZero()
 
-        const bn128 = o
-        if (this.x != null ? !this.x.eq(bn128.x) : bn128.x != null) return false
-        if (this.y != null ? !this.y.eq(bn128.y) : bn128.y != null) return false
-        return !(this.z != null ? !this.z.eq(bn128.z) : bn128.z != null)
+        // points may use different z-scaling (Jacobian coordinates), so
+        // compare in affine form rather than raw x/y/z components
+        const a = this.toAffine()
+        const b = o.toAffine()
+        return a.x.eq(b.x) && a.y.eq(b.y)
     }
 
     static create(xx, yy) {
@@ -240,12 +242,14 @@ class BN128Fp2 {
         BN128Fp2.twinv.b.multiply(new Field(3n))
     )
 
+    neg = () => new BN128Fp2(this.x, this.y.negate(), this.z)
+
     /**
      * Transforms given Jacobian to affine coordinates and then creates a point
      */
     toAffine() {
         if (this.isZero()) {
-            let zero = zero()
+            let zero = BN128Fp2.ZERO
             return new BN128Fp2(zero.x, Fp2._1, zero.z) // (0; 1; 0)
         }
 
@@ -379,9 +383,9 @@ class BN128Fp2 {
     isValid() {
         // check whether coordinates belongs to the Field
         if (
-            (!this.x) instanceof Fp2 ||
-            (!this.y) instanceof Fp2 ||
-            (!this.z) instanceof Fp2
+            !(this.x instanceof Fp2) ||
+            !(this.y instanceof Fp2) ||
+            !(this.z instanceof Fp2)
         ) {
             return false
         }
@@ -405,11 +409,13 @@ class BN128Fp2 {
     eq(o) {
         if (this === o) return true
         if (!(o instanceof BN128Fp2)) return false
+        if (this.isZero() || o.isZero()) return this.isZero() === o.isZero()
 
-        const bn128 = o
-        if (this.x != null ? !this.x.eq(bn128.x) : bn128.x != null) return false
-        if (this.y != null ? !this.y.eq(bn128.y) : bn128.y != null) return false
-        return !(this.z != null ? !this.z.eq(bn128.z) : bn128.z != null)
+        // points may use different z-scaling (Jacobian coordinates), so
+        // compare in affine form rather than raw x/y/z components
+        const a = this.toAffine()
+        const b = o.toAffine()
+        return a.x.eq(b.x) && a.y.eq(b.y)
     }
 
     static create(aa, bb, cc, dd) {

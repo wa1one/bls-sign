@@ -8,6 +8,42 @@ npm: [bls-sign](https://www.npmjs.com/package/bls-sign) (legacy, unscoped) · [@
 
 The Boneh–Lynn–Shacham (BLS) signature scheme allows a user to verify that a signer is authentic. The scheme uses a bilinear pairing for verification, and signatures are elements of an elliptic curve group. Working in an elliptic curve group provides some defense against index calculus attacks, allowing shorter signatures than FDH signatures for a similar level of security. Signatures produced by the BLS signature scheme are often referred to as short signatures, BLS short signatures, or simply BLS signatures. The signature scheme is provably secure (it is existentially unforgeable under adaptive chosen-message attacks), assuming both the existence of random oracles and the intractability of the computational Diffie–Hellman problem in a gap Diffie–Hellman group.
 
+### Usage
+
+```
+npm install @wa1one/bls-sign
+```
+
+```js
+const { BLSSigner, BLSSecretKey, BLSPublicKey } = require('@wa1one/bls-sign')
+
+const signer = new BLSSigner(256)
+
+// Q is a fixed global generator on G2; H is the message hashed onto the curve
+const Q = signer.G.multiply(4n)
+const H = signer.getRandomPointOnEt()
+
+const secretKey = new BLSSecretKey()
+const publicKey = new BLSPublicKey(secretKey, Q)
+const signature = secretKey.sign(H)
+
+signer.verify(Q, H, publicKey, signature) // true
+```
+
+#### Threshold signatures
+
+A secret key can be split into `n` shares, any `k` of which are enough to reconstruct it (Shamir's Secret Sharing):
+
+```js
+// split secretKey into 5 shares, any 3 of which reconstruct it
+const shares = secretKey.share(5, 3)
+
+const recovered = new BLSSecretKey()
+recovered.recover(shares.slice(0, 3))
+
+recovered.s === secretKey.s // true
+```
+
 ### The Scheme
 
 ```
