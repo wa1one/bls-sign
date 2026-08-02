@@ -30,11 +30,11 @@ class Pairing {
     }
 
     doubletate(P, Q, P2, Q2) {
-        const f = this.Fp12_1
+        let f = this.Fp12_1
         if (!P.zero() && !Q.zero()) {
             const bn = this.E.bn
-            const V = P
-            const V2 = P2
+            let V = P
+            let V2 = P2
             for (let i = bn.n.bitLength() - 2; i >= 0; i--) {
                 f = f
                     .square()

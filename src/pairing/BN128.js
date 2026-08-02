@@ -9,7 +9,8 @@ class BN128Fp {
         }
     }
 
-    static n = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
+    static n =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617n
 
     static ZERO = new BN128Fp(Field._0, Field._0, Field._0)
     static B = new Field(3n)
@@ -21,8 +22,8 @@ class BN128Fp {
      */
     toAffine() {
         if (this.isZero()) {
-            zero = BN128Fp.ZERO
-            return new BN128(zero.x, Field._1, zero.z) // (0; 1; 0)
+            let zero = BN128Fp.ZERO
+            return new BN128Fp(zero.x, Field._1, zero.z) // (0; 1; 0)
         }
 
         const zInv = this.z.inverse()
@@ -155,9 +156,9 @@ class BN128Fp {
     isValid() {
         // check whether coordinates belongs to the Field
         if (
-            !this.x instanceof Field ||
-            !this.y instanceof Field ||
-            !this.z instanceof Field
+            (!this.x) instanceof Field ||
+            (!this.y) instanceof Field ||
+            (!this.z) instanceof Field
         ) {
             return false
         }
@@ -169,9 +170,6 @@ class BN128Fp {
 
         return true
     }
-
-    toString = () =>
-        `${this.x.toString()}, ${this.y.toString()}, ${this.z.toString()}`
 
     eq(o) {
         if (this === o) return true
@@ -189,7 +187,7 @@ class BN128Fp {
 
         // check for point at infinity
         if (x.isZero() && y.isZero()) {
-            return BN128.ZERO
+            return BN128Fp.ZERO
         }
 
         const p = new BN128Fp(x, y, Field._1)
@@ -221,7 +219,8 @@ class BN128Fp2 {
         }
     }
 
-    static n = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
+    static n =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617n
 
     static TWIST_MUL_BY_P_X = new Fp2(
         21575463638280843010398324269430826099269044274347216827212613867836435027261n,
@@ -246,7 +245,7 @@ class BN128Fp2 {
      */
     toAffine() {
         if (this.isZero()) {
-            zero = zero()
+            let zero = zero()
             return new BN128Fp2(zero.x, Fp2._1, zero.z) // (0; 1; 0)
         }
 
@@ -380,9 +379,9 @@ class BN128Fp2 {
     isValid() {
         // check whether coordinates belongs to the Field
         if (
-            !this.x instanceof Fp2 ||
-            !this.y instanceof Fp2 ||
-            !this.z instanceof Fp2
+            (!this.x) instanceof Fp2 ||
+            (!this.y) instanceof Fp2 ||
+            (!this.z) instanceof Fp2
         ) {
             return false
         }
