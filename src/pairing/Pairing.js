@@ -1,5 +1,5 @@
-const { Field2, Field12 } = require('alg-field')
-const { Point12 } = require('alg-bn')
+const { Field2, Field12 } = require('@wa1one/alg-field')
+const { Point12 } = require('@wa1one/alg-bn')
 
 class Pairing {
     constructor(Et) {

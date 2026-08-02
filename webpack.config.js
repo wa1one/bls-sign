@@ -12,7 +12,8 @@ module.exports = [
 
         externals: {
             'bigint-crypto-utils': 'bigint-crypto-utils',
-            'alg-field': 'alg-field',
+            '@wa1one/alg-field': '@wa1one/alg-field',
+            '@wa1one/alg-bn': '@wa1one/alg-bn',
         },
         module: {
             rules: [

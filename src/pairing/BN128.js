@@ -1,4 +1,4 @@
-const { Field, Fp2 } = require('alg-field')
+const { Field, Fp2 } = require('@wa1one/alg-field')
 
 class BN128Fp {
     constructor(x, y, z) {

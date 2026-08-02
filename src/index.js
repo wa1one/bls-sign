@@ -1,6 +1,6 @@
 const crypto = require('bigint-crypto-utils')
-const { Parameters } = require('alg-field')
-const { Point2 } = require('alg-bn')
+const { Parameters } = require('@wa1one/alg-field')
+const { Point2 } = require('@wa1one/alg-bn')
 
 const { BN128Fp, BN128Fp2 } = require('./pairing/BN128')
 const { PairingCheck } = require('./pairing/PairingCheck')

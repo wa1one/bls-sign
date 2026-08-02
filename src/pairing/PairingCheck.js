@@ -1,4 +1,4 @@
-const { Field, Fp2, Fp12 } = require('alg-field')
+const { Field, Fp2, Fp12 } = require('@wa1one/alg-field')
 
 const { BN128Fp2 } = require('./BN128')
 
