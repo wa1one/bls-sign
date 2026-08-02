@@ -1,6 +1,6 @@
 {
     "name": "@wa1one/bls-sign",
-    "version": "0.13.7",
+    "version": "0.13.8",
     "description": "BLS threshold signatures creation and verification",
     "main": "dist/index.js",
     "jsnext:main": "main.mjs",
