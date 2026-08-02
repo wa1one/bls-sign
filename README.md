@@ -19,7 +19,7 @@ const { BLSSigner, BLSSecretKey, BLSPublicKey } = require('@wa1one/bls-sign')
 
 const signer = new BLSSigner(256)
 
-// Q is a fixed global generator on G2; H is the message hashed onto the curve
+// Q is a fixed global generator on G1; H is the message hashed onto G2
 const Q = signer.G.multiply(4n)
 const H = signer.getRandomPointOnEt()
 
@@ -44,15 +44,63 @@ recovered.recover(shares.slice(0, 3))
 recovered.s === secretKey.s // true
 ```
 
+### API
+
+#### `BLSSigner`
+
+Holds the curve's fixed generator points and provides the top-level sign/verify helpers.
+
+- `new BLSSigner(bitLength)` — creates `G` (a generator point on G1) and `G2` (a generator point on G2). `bitLength` is currently unused.
+- `.G`, `.G2` — the fixed generator points.
+- `.getRandomPointOnE()` — a random scalar multiple of `G` (a random point on G1).
+- `.getRandomPointOnEt()` — a random scalar multiple of `G2` (a random point on G2); typically used as the "message" point `H`.
+- `.sign(H, s)` — low-level signing: returns `H.multiply(s)`, a raw point (not a `BLSSignature`). For normal use prefer `BLSSecretKey.sign(H)` below.
+- `.verify(Q, H, sQ, sH)` — checks `e(sQ, H) === e(Q, sH)`. `sQ` must be a `BLSPublicKey`, `sH` a `BLSSignature`.
+- `.getPairing()`, `.getParameters()` — currently always return `undefined`; unimplemented.
+
+#### `BLSSecretKey`
+
+- `new BLSSecretKey(s)` — wraps a secret scalar. If `s` is omitted, generates a random one-byte secret (0-255).
+- `.toString()`
+- `.getPublicKey(Q)` — derives this key's `BLSPublicKey` for generator `Q`.
+- `.sign(H)` — signs point `H`, returning a `BLSSignature`.
+- `.getMasterSecretKey(k)` — builds the `k` coefficients of a degree `k-1` sharing polynomial with `this` as the constant term (the secret). Throws if `k <= 1`.
+- `.share(n, k)` — Shamir's Secret Sharing: splits the secret into `n` shares (ids `1..n`) drawn from a degree `k-1` polynomial; any `k` of the returned shares can reconstruct the secret.
+- `.recover(vec)` — reconstructs the secret from an array of shares via Lagrange interpolation and sets `this.s` (`this.id` becomes `0`). Passing fewer than `k` shares does not throw — it silently produces a different, wrong secret, so callers are responsible for gathering enough shares.
+
+#### `BLSPublicKey`
+
+- `new BLSPublicKey(secretKey, Q)` — computes `sQ = Q.multiply(secretKey.s)`.
+- `.toString()`
+
+#### `BLSSignature`
+
+- `.toString()`
+- `.recover(signVec)` — combines an array of partial signatures (each produced by a key share's `.sign()`) into one valid signature via Lagrange interpolation, without ever reconstructing the underlying secret key. Same "fewer than `k` shares silently gives a wrong result" caveat as `BLSSecretKey.recover`.
+
+`BLSSignature` instances are normally produced by `BLSSecretKey.sign()` / `BLSSignature.recover()`, not constructed directly.
+
+#### `BLSPolynomial`
+
+Internal helper backing the threshold-sharing methods above:
+
+- `.eval(msk, x)` — evaluates the sharing polynomial (coefficients `msk`, each with an `.s`) at `x`.
+- `.calcDelta(ids)` — computes the Lagrange basis coefficients at `x = 0` for an array of share ids. Throws if fewer than 2 ids are given, or if two ids are equal.
+- `.lagrange(vec)` — reconstructs either a secret scalar (if entries have `.s`) or an aggregated signature point (if entries have `.sH`) via Lagrange interpolation at `x = 0`.
+
+#### `Parameters`
+
+Re-exported from `@wa1one/alg-field`: the curve's field parameters — `Parameters.p` (the base field prime) and `Parameters.n` (the curve/group order).
+
 ### The Scheme
 
 ```
- e : G2 x G1 -> Fp12 ; ate pairing over BN curve
- Q in G2 ; fixed global parameter
- H : {str} -> G1
+ e : G1 x G2 -> Fp12 ; ate pairing over BN curve
+ Q in G1 ; fixed global parameter
+ H : {str} -> G2
  s in Fr: secret key
- sQ in G2; public key
- s H(m) in G1; signature of m
+ sQ in G1; public key
+ s H(m) in G2; signature of m
  verify ; e(sQ, H(m)) = e(Q, s H(m))
 ```
 
