@@ -1,5 +1,7 @@
 # bls-sign
 
+npm: [bls-sign](https://www.npmjs.com/package/bls-sign) (legacy, unscoped) · [@wa1one/bls-sign](https://www.npmjs.com/package/@wa1one/bls-sign) (current)
+
 ### This package is still being downloaded ~10 times a week after 6 years! I decided to publish some small updates using new AI features.
 
 ### Boneh–Lynn–Shacham signature scheme
