@@ -47,7 +47,7 @@
     },
     "homepage": "https://github.com/wa1one/bls-sign#readme",
     "dependencies": {
-        "@wa1one/alg-bn": "^0.1.3",
+        "@wa1one/alg-bn": "^0.1.4",
         "@wa1one/alg-field": "^0.1.4",
         "bigint-crypto-utils": "^3.0.8"
     }
