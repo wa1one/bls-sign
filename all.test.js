@@ -1,4 +1,4 @@
-const { Field, Fp2, Fp6, Fp12 } = require('@wa1one/alg-field')
+const { Field, Fp2, Fp6, Fp12 } = require('alg-field')
 const { BN128Fp, BN128Fp2 } = require('./src/pairing/BN128')
 const { PairingCheck } = require('./src/pairing/PairingCheck')
 
