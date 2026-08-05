@@ -1,6 +1,6 @@
 # bls-sign
 
-npm: [bls-sign](https://www.npmjs.com/package/bls-sign) (legacy, unscoped) · [@wa1one/bls-sign](https://www.npmjs.com/package/@wa1one/bls-sign) (current)
+npm: [bls-sign](https://www.npmjs.com/package/bls-sign)
 
 ### This package is still being downloaded ~10 times a week after 6 years! I decided to publish some small updates using new AI features.
 
@@ -11,11 +11,11 @@ The Boneh–Lynn–Shacham (BLS) signature scheme allows a user to verify that a
 ### Usage
 
 ```
-npm install @wa1one/bls-sign
+npm install bls-sign
 ```
 
 ```js
-const { BLSSigner, BLSSecretKey, BLSPublicKey } = require('@wa1one/bls-sign')
+const { BLSSigner, BLSSecretKey, BLSPublicKey } = require('bls-sign')
 
 const signer = new BLSSigner(256)
 
@@ -90,7 +90,7 @@ Internal helper backing the threshold-sharing methods above:
 
 #### `Parameters`
 
-Re-exported from `@wa1one/alg-field`: the curve's field parameters — `Parameters.p` (the base field prime) and `Parameters.n` (the curve/group order).
+Re-exported from `alg-field`: the curve's field parameters — `Parameters.p` (the base field prime) and `Parameters.n` (the curve/group order).
 
 ### The Scheme
 
