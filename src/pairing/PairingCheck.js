@@ -26,19 +26,74 @@ class PairingCheck {
     }
 
     run() {
-        for (let pair of this.pairs) {
-            const miller = this.millerLoop(pair[0], pair[1])
-
-            if (!miller.eq(Fp12._1))
-                // run mul code only
-                this.product = this.product.multiply(miller)
-        }
-        // finalize
-        this.product = this.finalExponentiation(this.product)
+        this.product = this.finalExponentiation(this.millerProduct())
     }
 
     result() {
         return this.product
+    }
+
+    /**
+     * Merged multi-Miller loop: all pairs share a single accumulator, so the
+     * per-iteration squaring is done once instead of once per pair. The
+     * result is exactly the product of the individual millerLoop values,
+     * since squaring distributes over the product and every pair's line
+     * evaluations enter at the same loop positions.
+     */
+    millerProduct() {
+        const prepared = []
+        for (const pair of this.pairs) {
+            prepared.push({
+                g1: pair[0].toAffine(),
+                coeffs: this.calcEllCoeffs(pair[1].toAffine()),
+            })
+        }
+
+        let f = Fp12._1
+        let idx = 0
+
+        const bl = PairingCheck.LOOP_COUNT.bitLength() - 2
+
+        // for each bit except most significant one
+        for (let i = bl; i >= 0; i--) {
+            f = f.square()
+            for (const pr of prepared) {
+                const c = pr.coeffs[idx]
+                f = f.mulBy024(
+                    c.ell0,
+                    pr.g1.y.multiply(c.ellVW),
+                    pr.g1.x.multiply(c.ellVV)
+                )
+            }
+            idx++
+
+            if (PairingCheck.LOOP_COUNT.testBit(i)) {
+                for (const pr of prepared) {
+                    const c = pr.coeffs[idx]
+                    f = f.mulBy024(
+                        c.ell0,
+                        pr.g1.y.multiply(c.ellVW),
+                        pr.g1.x.multiply(c.ellVV)
+                    )
+                }
+                idx++
+            }
+        }
+
+        // the two BN-curve Frobenius correction steps
+        for (let step = 0; step < 2; step++) {
+            for (const pr of prepared) {
+                const c = pr.coeffs[idx]
+                f = f.mulBy024(
+                    c.ell0,
+                    pr.g1.y.multiply(c.ellVW),
+                    pr.g1.x.multiply(c.ellVV)
+                )
+            }
+            idx++
+        }
+
+        return f
     }
 
     millerLoop(g1, g2) {

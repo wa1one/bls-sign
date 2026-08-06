@@ -1,5 +1,5 @@
 const crypto = require('./random')
-const { Parameters } = require('alg-field')
+const { Parameters, Fp12 } = require('alg-field')
 
 const { BN128Fp, BN128Fp2 } = require('./pairing/BN128')
 const { PairingCheck } = require('./pairing/PairingCheck')
@@ -211,15 +211,17 @@ class BLSSigner {
     sign = (H, s) => H.multiply(s)
 
     verify(Q, H, sQ, sH) {
-        const pc2 = this.PairingCheck.create()
-        pc2.addPair(sQ.sQ, H)
-        pc2.run()
+        // single product check e(-sQ, H) * e(Q, sH) == 1, equivalent to
+        // e(sQ, H) == e(Q, sH) by bilinearity: one merged Miller loop and
+        // one final exponentiation instead of two of each.
+        const pc = this.PairingCheck.create()
+        pc.addPair(sQ.sQ.neg(), H)
+        pc.addPair(Q, sH.sH)
+        pc.run()
 
-        const pc3 = this.PairingCheck.create()
-        pc3.addPair(Q, sH.sH)
-        pc3.run()
-
-        return pc2.result().eq(pc3.result())
+        // Fp12 equality is value-based, so the BN254-tower _1 constant is a
+        // valid identity element for both curves' results
+        return pc.result().eq(Fp12._1)
     }
 }
 

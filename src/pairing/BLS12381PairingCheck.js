@@ -99,18 +99,53 @@ class BLS12381PairingCheck {
     }
 
     run() {
-        for (let pair of this.pairs) {
-            const miller = this.millerLoop(pair[0], pair[1])
-
-            if (!miller.eq(Fp12.one(fp12Params))) {
-                this.product = this.product.multiply(miller)
-            }
-        }
-        this.product = finalExponentiation(this.product)
+        this.product = finalExponentiation(this.millerProduct())
     }
 
     result() {
         return this.product
+    }
+
+    /**
+     * Merged multi-Miller loop: all pairs share a single accumulator, so the
+     * per-iteration squaring is done once instead of once per pair, and the
+     * negative-x inversion is applied once to the product (exact, since
+     * squaring distributes over the product and (f*g)^-1 = f^-1 * g^-1).
+     */
+    millerProduct() {
+        const prepared = []
+        for (const pair of this.pairs) {
+            prepared.push({
+                g1: pair[0].toAffine(),
+                coeffs: this.calcEllCoeffs(pair[1].toAffine()),
+            })
+        }
+
+        let f = Fp12.one(fp12Params)
+        let idx = 0
+
+        const bl = X_ABS.bitLength() - 2
+
+        for (let i = bl; i >= 0; i--) {
+            f = f.square()
+            for (const pr of prepared) {
+                f = mulByLine(f, pr.coeffs[idx], pr.g1)
+            }
+            idx++
+
+            if (X_ABS.testBit(i)) {
+                for (const pr of prepared) {
+                    f = mulByLine(f, pr.coeffs[idx], pr.g1)
+                }
+                idx++
+            }
+        }
+
+        if (X_IS_NEGATIVE) {
+            f = f.inverse()
+        }
+
+        return f
     }
 
     millerLoop(g1, g2) {
