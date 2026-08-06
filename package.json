@@ -1,6 +1,6 @@
 {
     "name": "bls-sign",
-    "version": "0.13.16",
+    "version": "0.13.17",
     "description": "BLS threshold signatures creation and verification",
     "main": "dist/index.js",
     "jsnext:main": "main.mjs",
@@ -45,7 +45,7 @@
     },
     "homepage": "https://github.com/wa1one/bls-sign#readme",
     "dependencies": {
-        "alg-bn": "^0.2.1",
-        "alg-field": "^0.2.2"
+        "alg-bn": "^0.2.2",
+        "alg-field": "^0.2.4"
     }
 }

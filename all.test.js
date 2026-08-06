@@ -373,7 +373,10 @@ describe('Signature security properties', function () {
         const pk = new BLSPublicKey(sk, Q)
 
         const H1 = signer.getRandomPointOnEt()
-        const H2 = signer.getRandomPointOnEt()
+        // getRandomPointOnEt draws from a small scalar range, so guard
+        // against the two "random" messages colliding
+        let H2 = signer.getRandomPointOnEt()
+        while (H2.eq(H1)) H2 = signer.getRandomPointOnEt()
 
         const sig = sk.sign(H1)
 
@@ -387,7 +390,9 @@ describe('Signature security properties', function () {
         const H = signer.getRandomPointOnEt()
 
         const skA = new BLSSecretKey()
-        const skB = new BLSSecretKey()
+        // random secrets are a single byte, so guard against a collision
+        let skB = new BLSSecretKey()
+        while (skB.s === skA.s) skB = new BLSSecretKey()
         const pkB = new BLSPublicKey(skB, Q)
 
         const sigA = skA.sign(H)
@@ -425,7 +430,8 @@ describe('Signature security properties', function () {
         const sk = new BLSSecretKey()
 
         const H1 = signer.getRandomPointOnEt()
-        const H2 = signer.getRandomPointOnEt()
+        let H2 = signer.getRandomPointOnEt()
+        while (H2.eq(H1)) H2 = signer.getRandomPointOnEt()
 
         const sig1 = sk.sign(H1)
         const sig2 = sk.sign(H2)
@@ -439,7 +445,8 @@ describe('Signature security properties', function () {
         const H = signer.getRandomPointOnEt()
 
         const skA = new BLSSecretKey()
-        const skB = new BLSSecretKey()
+        let skB = new BLSSecretKey()
+        while (skB.s === skA.s) skB = new BLSSecretKey()
 
         expect(skA.s).not.toEqual(skB.s)
 

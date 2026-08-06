@@ -105,9 +105,9 @@ The 18x `verify` speedup in 0.13.14 comes from replacing the generic 4314-bit fi
 
 In 0.13.16 the extension-tower parameters (non-residue and all Frobenius coefficients) are hardcoded rather than derived by brute-force search on first use, eliminating the ~0.9 s one-time `bls12381()` cost; a unit test re-runs the generic derivation and asserts it still matches the hardcoded constants.
 
-#### Known issue: module load time
+#### Module load time (fixed in 0.13.17)
 
-Importing the library itself (`require('bls-sign')`) takes ~1.4 s since 0.13.13, up from ~7 ms in 0.13.11. The cause is in the `alg-field`/`alg-bn` 0.2.x dependencies: they derive their BN254 default tower parameters at import time using the same brute-force search, and `alg-bn` bundles its own copy of `alg-field`, paying the cost twice. (In the browser bundle, `alg-bn`'s share of this — ~0.7 s — is deferred until the first `bls12381()` call, since that is when the bundled module first executes.) This needs the same hardcode-or-lazy fix upstream in those packages; the ~2 ms figure in the table above is the cost of the factory itself once dependencies are loaded.
+Importing the library (`require('bls-sign')`) took ~1.4 s from 0.13.13 through 0.13.16, up from ~7 ms in 0.13.11: the `alg-field`/`alg-bn` 0.2.x dependencies derived their BN254 default tower parameters at import time with the same brute-force search, and `alg-bn` bundles its own copy of `alg-field`, paying the cost twice. Fixed upstream with the same hardcoded-constants treatment (`alg-field` 0.2.4, `alg-bn` 0.2.2, each guarded by a derivation-match unit test); as of 0.13.17, `require('bls-sign')` takes ~7 ms and the first `bls12381()` call ~6 ms.
 
 Unpacked package size: 29 kB (0.13.11) → 43 kB (0.13.14), the increase being the BLS12-381 curve and pairing code.
 
