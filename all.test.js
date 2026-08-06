@@ -363,3 +363,158 @@ describe('Threshold signature aggregation', function () {
         expect(recovered2.sH.eq(directSig.sH)).toBeFalsy()
     })
 })
+
+describe('Signature security properties', function () {
+    test('verify rejects a signature checked against the wrong message', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+
+        const sk = new BLSSecretKey()
+        const pk = new BLSPublicKey(sk, Q)
+
+        const H1 = signer.getRandomPointOnEt()
+        const H2 = signer.getRandomPointOnEt()
+
+        const sig = sk.sign(H1)
+
+        expect(signer.verify(Q, H1, pk, sig)).toBeTruthy()
+        expect(signer.verify(Q, H2, pk, sig)).toBeFalsy()
+    })
+
+    test('verify rejects a signature checked against the wrong public key', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+        const H = signer.getRandomPointOnEt()
+
+        const skA = new BLSSecretKey()
+        const skB = new BLSSecretKey()
+        const pkB = new BLSPublicKey(skB, Q)
+
+        const sigA = skA.sign(H)
+
+        expect(signer.verify(Q, H, pkB, sigA)).toBeFalsy()
+    })
+
+    test('verify rejects a signature produced under a different global generator Q', function () {
+        const signer = new BLSSigner(256)
+        const Q1 = signer.G.multiply(4n)
+        const Q2 = signer.G.multiply(7n)
+        const H = signer.getRandomPointOnEt()
+
+        const sk = new BLSSecretKey()
+        const pkUnderQ1 = new BLSPublicKey(sk, Q1)
+        const sig = sk.sign(H)
+
+        expect(signer.verify(Q1, H, pkUnderQ1, sig)).toBeTruthy()
+        expect(signer.verify(Q2, H, pkUnderQ1, sig)).toBeFalsy()
+    })
+
+    test('signing is deterministic for a given key and message', function () {
+        const signer = new BLSSigner(256)
+        const H = signer.getRandomPointOnEt()
+        const sk = new BLSSecretKey(42)
+
+        const sig1 = sk.sign(H)
+        const sig2 = sk.sign(H)
+
+        expect(sig1.sH.eq(sig2.sH)).toBeTruthy()
+    })
+
+    test('signing different messages with the same key produces different signatures', function () {
+        const signer = new BLSSigner(256)
+        const sk = new BLSSecretKey()
+
+        const H1 = signer.getRandomPointOnEt()
+        const H2 = signer.getRandomPointOnEt()
+
+        const sig1 = sk.sign(H1)
+        const sig2 = sk.sign(H2)
+
+        expect(sig1.sH.eq(sig2.sH)).toBeFalsy()
+    })
+
+    test('different secret keys produce different public keys and signatures', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+        const H = signer.getRandomPointOnEt()
+
+        const skA = new BLSSecretKey()
+        const skB = new BLSSecretKey()
+
+        expect(skA.s).not.toEqual(skB.s)
+
+        const pkA = new BLSPublicKey(skA, Q)
+        const pkB = new BLSPublicKey(skB, Q)
+        expect(pkA.sQ.eq(pkB.sQ)).toBeFalsy()
+
+        const sigA = skA.sign(H)
+        const sigB = skB.sign(H)
+        expect(sigA.sH.eq(sigB.sH)).toBeFalsy()
+    })
+})
+
+describe('Threshold scheme parameter variations', function () {
+    test('7-of-10: any 7 shares reconstruct the secret, 6 do not', function () {
+        const prv0 = new BLSSecretKey()
+        const vec = prv0.share(10, 7)
+
+        const recovered7 = new BLSSecretKey()
+        recovered7.recover(vec.slice(0, 7))
+        expect(recovered7.s).toEqual(prv0.s)
+
+        const recovered6 = new BLSSecretKey()
+        recovered6.recover(vec.slice(0, 6))
+        expect(recovered6.s).not.toEqual(prv0.s)
+    })
+
+    test('non-contiguous share subsets reconstruct the secret correctly', function () {
+        const prv0 = new BLSSecretKey()
+        const vec = prv0.share(6, 3)
+
+        // ids 2, 4, 6 instead of the first 3
+        const subset = [vec[1], vec[3], vec[5]]
+
+        const recovered = new BLSSecretKey()
+        recovered.recover(subset)
+        expect(recovered.s).toEqual(prv0.s)
+    })
+
+    test('k equal to n requires every share to reconstruct the secret', function () {
+        const prv0 = new BLSSecretKey()
+        const vec = prv0.share(4, 4)
+
+        const recoveredAll = new BLSSecretKey()
+        recoveredAll.recover(vec)
+        expect(recoveredAll.s).toEqual(prv0.s)
+
+        const recoveredMissingOne = new BLSSecretKey()
+        recoveredMissingOne.recover(vec.slice(0, 3))
+        expect(recoveredMissingOne.s).not.toEqual(prv0.s)
+    })
+
+    test('minimum threshold k=2 works', function () {
+        const prv0 = new BLSSecretKey()
+        const vec = prv0.share(3, 2)
+
+        const recovered = new BLSSecretKey()
+        recovered.recover(vec.slice(0, 2))
+        expect(recovered.s).toEqual(prv0.s)
+    })
+})
+
+describe('Input validation', function () {
+    test('BLSSecretKey(0) creates an explicit zero secret rather than a random one', function () {
+        const sk = new BLSSecretKey(0)
+        expect(sk.s).toEqual(0n)
+    })
+
+    test('BLSSecretKey() with no argument still generates a random secret', function () {
+        const sk = new BLSSecretKey()
+        expect(typeof sk.s).toBe('bigint')
+    })
+
+    test('share(n, k) rejects k > n', function () {
+        const prv0 = new BLSSecretKey()
+        expect(() => prv0.share(3, 5)).toThrow()
+    })
+})

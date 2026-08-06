@@ -77,7 +77,7 @@ Holds the curve's fixed generator points and provides the top-level sign/verify 
 - `.getPublicKey(Q)` — derives this key's `BLSPublicKey` for generator `Q`.
 - `.sign(H)` — signs point `H`, returning a `BLSSignature`.
 - `.getMasterSecretKey(k)` — builds the `k` coefficients of a degree `k-1` sharing polynomial with `this` as the constant term (the secret). Throws if `k <= 1`.
-- `.share(n, k)` — Shamir's Secret Sharing: splits the secret into `n` shares (ids `1..n`) drawn from a degree `k-1` polynomial; any `k` of the returned shares can reconstruct the secret.
+- `.share(n, k)` — Shamir's Secret Sharing: splits the secret into `n` shares (ids `1..n`) drawn from a degree `k-1` polynomial; any `k` of the returned shares can reconstruct the secret. Throws if `k > n`.
 - `.recover(vec)` — reconstructs the secret from an array of shares via Lagrange interpolation and sets `this.s` (`this.id` becomes `0`). Passing fewer than `k` shares does not throw — it silently produces a different, wrong secret, so callers are responsible for gathering enough shares.
 
 #### `BLSPublicKey`

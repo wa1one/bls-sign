@@ -7,9 +7,9 @@ const { PairingCheck } = require('./pairing/PairingCheck')
 /** Secret Key */
 class BLSSecretKey {
     constructor(s) {
-        if (!s) {
-            const s = crypto.randBytesSync(1)
-            this.s = BigInt(s[0])
+        if (s === undefined) {
+            const randomByte = crypto.randBytesSync(1)
+            this.s = BigInt(randomByte[0])
         } else {
             this.s = BigInt(s)
         }
@@ -44,6 +44,9 @@ class BLSSecretKey {
     }
 
     share(n, k) {
+        if (k > n) {
+            throw Error('bad k ' + k + ': k must be <= n (' + n + ')')
+        }
         const msk = this.getMasterSecretKey(k)
         const secVec = new Array(n)
         const ids = new Array(n)
