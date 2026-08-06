@@ -180,6 +180,20 @@ Counting on all participants to combine the secret might be impractical, so the 
 
 ![alt text](https://media.geeksforgeeks.org/wp-content/uploads/20200415120740/math4.png)
 
+### Interactive demo
+
+[`demo.html`](demo.html) is a self-contained browser playground for the whole API: pick a curve (alt_bn128 or BLS12-381), generate or set a secret key, sign a text message (SHA-256 → G2 point), verify — including against a tampered message or the wrong key — and split the secret into k-of-n shares, then aggregate any subset of partial signatures and see whether the result verifies. Every operation shows its wall-clock time.
+
+It loads the locally built browser bundle, so from a fresh clone:
+
+```
+npm install
+npm run build
+open demo.html   # or serve the repo root with any static file server
+```
+
+The demo is repository-only — it is not part of the published npm package.
+
 ### Build
 
 ```
