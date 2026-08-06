@@ -167,20 +167,41 @@ class BLSSigner {
             11559732032986387107991004021392285783925812861821192530917403151452391805634n,
             8495653923123431417604973247489272438418190587263600148770280649306958101930n,
             4082367875863433681332203403145435568316851327593401208105741076214120093531n
-        )
+        ),
+        PairingCheckImpl = PairingCheck,
+        fieldPrime = Parameters.p
     ) {
         this.G = G
         this.G2 = G2
+        this.PairingCheck = PairingCheckImpl
+        this.fieldPrime = fieldPrime
+    }
+
+    /** Creates a signer over the BLS12-381 curve instead of the default BN254 */
+    static bls12381(bitLength) {
+        const { BLS12Fp, BLS12Fp2 } = require('./pairing/BLS12381')
+        const {
+            BLS12381PairingCheck,
+        } = require('./pairing/BLS12381PairingCheck')
+        const params = require('./pairing/bls12381Params')
+
+        return new BLSSigner(
+            bitLength,
+            BLS12Fp.create(params.Gx, params.Gy),
+            BLS12Fp2.create(...params.G2x, ...params.G2y),
+            BLS12381PairingCheck,
+            params.p
+        )
     }
 
     getRandomPointOnE = () =>
         this.G.multiply(
-            crypto.randBetween(4n * BigInt(Parameters.p.bitLength()))
+            crypto.randBetween(4n * BigInt(this.fieldPrime.bitLength()))
         )
 
     getRandomPointOnEt = () =>
         this.G2.multiply(
-            crypto.randBetween(4n * BigInt(Parameters.p.bitLength()))
+            crypto.randBetween(4n * BigInt(this.fieldPrime.bitLength()))
         )
 
     getPairing = () => this.pair
@@ -190,11 +211,11 @@ class BLSSigner {
     sign = (H, s) => H.multiply(s)
 
     verify(Q, H, sQ, sH) {
-        const pc2 = PairingCheck.create()
+        const pc2 = this.PairingCheck.create()
         pc2.addPair(sQ.sQ, H)
         pc2.run()
 
-        const pc3 = PairingCheck.create()
+        const pc3 = this.PairingCheck.create()
         pc3.addPair(Q, sH.sH)
         pc3.run()
 

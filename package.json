@@ -1,6 +1,6 @@
 {
     "name": "bls-sign",
-    "version": "0.13.12",
+    "version": "0.13.13",
     "description": "BLS threshold signatures creation and verification",
     "main": "dist/index.js",
     "jsnext:main": "main.mjs",
@@ -23,7 +23,7 @@
         "Threshold",
         "Signature"
     ],
-    "author": "Vladimir Kovalchuk <vladimir.k@clever-solution.com> (https://vladimirkovalchuk8.wixsite.com/profile)",
+    "author": "Volodymyr Kovalchuk <vladimir.kovalchuk.88@gmail.com>",
     "devDependencies": {
         "@babel/core": "^7.12.1",
         "@babel/plugin-proposal-class-properties": "^7.12.1",
@@ -45,7 +45,7 @@
     },
     "homepage": "https://github.com/wa1one/bls-sign#readme",
     "dependencies": {
-        "alg-bn": "^0.1.10",
-        "alg-field": "^0.1.10"
+        "alg-bn": "^0.2.1",
+        "alg-field": "^0.2.2"
     }
 }

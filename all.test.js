@@ -518,3 +518,103 @@ describe('Input validation', function () {
         expect(() => prv0.share(3, 5)).toThrow()
     })
 })
+
+describe('BLS12-381 curve', function () {
+    const { BLS12Fp, BLS12Fp2 } = require('./src/pairing/BLS12381')
+    const {
+        BLS12381PairingCheck,
+    } = require('./src/pairing/BLS12381PairingCheck')
+    const bls12381Params = require('./src/pairing/bls12381Params')
+
+    const G = BLS12Fp.create(bls12381Params.Gx, bls12381Params.Gy)
+    const G2 = BLS12Fp2.create(...bls12381Params.G2x, ...bls12381Params.G2y)
+
+    function pairing(p1, p2) {
+        const pc = BLS12381PairingCheck.create()
+        pc.addPair(p1, p2)
+        pc.run()
+        return pc.result()
+    }
+
+    test('G1/G2 generators are valid points of the expected group order', function () {
+        expect(G).not.toBeNull()
+        expect(G.isOnCurve()).toBeTruthy()
+        expect(G.isValid()).toBeTruthy()
+        expect(G.multiply(bls12381Params.n).isZero()).toBeTruthy()
+
+        expect(G2).not.toBeNull()
+        expect(G2.isOnCurve()).toBeTruthy()
+        expect(G2.isValid()).toBeTruthy()
+        expect(G2.multiply(bls12381Params.n).isZero()).toBeTruthy()
+    })
+
+    test('point arithmetic identities hold on both groups', function () {
+        expect(G.double().eq(G.add(G))).toBeTruthy()
+        expect(G.add(G.neg()).isZero()).toBeTruthy()
+        expect(G.multiply(0n).isZero()).toBeTruthy()
+
+        expect(G2.double().eq(G2.add(G2))).toBeTruthy()
+        expect(G2.add(G2.neg()).isZero()).toBeTruthy()
+        expect(G2.multiply(0n).isZero()).toBeTruthy()
+
+        // eq() invariant to Jacobian z-scaling
+        const direct = G.multiply(5n)
+        const viaAddition = G.multiply(2n).add(G.multiply(3n))
+        expect(direct.z.eq(viaAddition.z)).toBeFalsy()
+        expect(direct.eq(viaAddition)).toBeTruthy()
+    })
+
+    test(
+        'pairing is non-degenerate and bilinear',
+        function () {
+            const e1 = pairing(G, G2)
+            const one = require('alg-field').Fp12.one(bls12381Params.fp12Params)
+            expect(e1.eq(one)).toBeFalsy()
+
+            const eSq = e1.multiply(e1)
+            expect(pairing(G.multiply(2n), G2).eq(eSq)).toBeTruthy()
+            expect(pairing(G, G2.multiply(2n)).eq(eSq)).toBeTruthy()
+        },
+        120000
+    )
+
+    test(
+        'BLS signatures sign/verify on BLS12-381 via BLSSigner.bls12381()',
+        function () {
+            const signer = BLSSigner.bls12381(256)
+            const Q = signer.G.multiply(4n)
+            const H = signer.getRandomPointOnEt()
+
+            const sk = new BLSSecretKey()
+            const pk = new BLSPublicKey(sk, Q)
+            const sig = sk.sign(H)
+
+            expect(signer.verify(Q, H, pk, sig)).toBeTruthy()
+
+            const wrongSig = new BLSSecretKey(sk.s + 1n).sign(H)
+            expect(signer.verify(Q, H, pk, wrongSig)).toBeFalsy()
+        },
+        120000
+    )
+
+    test(
+        'threshold signature aggregation works on BLS12-381',
+        function () {
+            const signer = BLSSigner.bls12381(256)
+            const Q = signer.G.multiply(4n)
+            const H = signer.getRandomPointOnEt()
+
+            const sk = new BLSSecretKey()
+            const pk = new BLSPublicKey(sk, Q)
+            const directSig = sk.sign(H)
+
+            const shares = sk.share(5, 3)
+            const sigShares = shares.slice(0, 3).map((share) => share.sign(H))
+            const recovered = new BLSSignature().recover(sigShares)
+
+            expect(recovered.sH.eq(directSig.sH)).toBeTruthy()
+            expect(signer.verify(Q, H, pk, recovered)).toBeTruthy()
+        },
+        120000
+    )
+})

@@ -14,7 +14,8 @@ Highlights from the latest round of fixes and cleanup:
 - **Removed the `bigint-crypto-utils` dependency** — `randBytesSync`/`randBetween` are now implemented locally (backed by Node's `crypto.randomBytes`, with a Web Crypto API fallback for the browser bundle), verified against the original implementation for identical behavior.
 - **Fixed the browser bundle** — Babel's transform of the `**` exponentiation operator doesn't support `BigInt` operands, which silently broke `share()` and the random-point helpers whenever the library was bundled for the browser. Rewritten to avoid `**` on `BigInt` values entirely.
 - **`BLSSigner` and `Pairing.ate()` now accept optional parameters** for the curve's fixed generator points and pairing loop constants (previously hardcoded), while staying backward compatible with existing calls.
-- Added comprehensive test coverage (7 → 19 tests) and full API documentation (this README).
+- **Added BLS12-381 curve support** via `BLSSigner.bls12381()` — a from-scratch optimal ate pairing over BLS12-381's M-type sextic twist, verified for non-degeneracy and bilinearity. alt_bn128 (BN254) remains the default; existing code is unaffected.
+- Added comprehensive test coverage (7 → 37 tests) and full API documentation (this README).
 
 ### Boneh–Lynn–Shacham signature scheme
 
@@ -42,6 +43,24 @@ const signature = secretKey.sign(H)
 signer.verify(Q, H, publicKey, signature) // true
 ```
 
+#### Using the BLS12-381 curve
+
+The default curve is alt_bn128 (BN254), matching Ethereum's precompiles. A signer over BLS12-381 (the curve used by Ethereum consensus, Zcash, Chia, and filecoin) works identically:
+
+```js
+const signer = BLSSigner.bls12381(256)
+
+const Q = signer.G.multiply(4n)
+const H = signer.getRandomPointOnEt()
+
+const secretKey = new BLSSecretKey()
+const publicKey = new BLSPublicKey(secretKey, Q)
+
+signer.verify(Q, H, publicKey, secretKey.sign(H)) // true
+```
+
+Note: the BLS12-381 pairing currently uses a generic (unoptimized) final exponentiation, so `verify` takes a few seconds — fine for experimentation, not for high-throughput use.
+
 #### Threshold signatures
 
 A secret key can be split into `n` shares, any `k` of which are enough to reconstruct it (Shamir's Secret Sharing):
@@ -62,7 +81,8 @@ recovered.s === secretKey.s // true
 
 Holds the curve's fixed generator points and provides the top-level sign/verify helpers.
 
-- `new BLSSigner(bitLength, G, G2)` — creates `G` (a generator point on G1) and `G2` (a generator point on G2); both default to the curve's standard generators and can be overridden. `bitLength` is currently unused.
+- `new BLSSigner(bitLength, G, G2, PairingCheckImpl, fieldPrime)` — creates `G` (a generator point on G1) and `G2` (a generator point on G2); both default to alt_bn128's standard generators and can be overridden, along with the pairing implementation and base-field prime. `bitLength` is currently unused.
+- `BLSSigner.bls12381(bitLength)` — factory returning a signer over the BLS12-381 curve (standard generators, M-type-twist optimal ate pairing) instead of the default alt_bn128.
 - `.G`, `.G2` — the fixed generator points.
 - `.getRandomPointOnE()` — a random scalar multiple of `G` (a random point on G1).
 - `.getRandomPointOnEt()` — a random scalar multiple of `G2` (a random point on G2); typically used as the "message" point `H`.
