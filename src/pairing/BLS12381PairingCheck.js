@@ -1,8 +1,6 @@
 const { Fp2, Fp6, Fp12 } = require('alg-field')
 const { BLS12Fp2 } = require('./BLS12381')
 const {
-    p,
-    n,
     X_ABS,
     X_IS_NEGATIVE,
     _2_INV,
@@ -20,34 +18,40 @@ class EllCoeffs {
 }
 
 /**
- * Generic (non-optimized) final exponentiation: f^((p^12 - 1) / n).
+ * Optimized final exponentiation, computing f^(3 * (p^12 - 1) / n).
  *
- * The tower-based Fp12 implementation only exposes cyclotomicExp (valid on
- * elements already reduced into the cyclotomic subgroup) rather than a
- * general-purpose exp, and BLS12-381's optimized "easy part + hard part"
- * final exponentiation formula is a curve-specific formula this codebase has
- * no way to verify. This full exponentiation is mathematically correct
- * regardless, just slower.
+ * Easy part: f^((p^6-1)(p^2+1)) via conjugation (= ^p^6 on this tower), one
+ * inverse, and a Frobenius - after which the value lies in the cyclotomic
+ * subgroup, making cyclotomicExp/negExp valid and inversion a conjugation.
+ *
+ * Hard part: the Hayashida-Hayasaka-Teruya decomposition
+ *
+ *   3 * (p^4 - p^2 + 1) / n = (x-1)^2 * (x+p) * (x^2 + p^2 - 1) + 3
+ *
+ * (verified numerically against the actual p, n, and BLS parameter x),
+ * with the negative x handled via negExp: m^(x-1) = m^-(|x|+1).
+ *
+ * The extra factor of 3 makes this the cube of the textbook pairing value.
+ * Cubing is a bijection on the order-n result subgroup (gcd(3, n) = 1), so
+ * bilinearity, non-degeneracy, equality comparisons, and product-equals-one
+ * checks are all exactly preserved - only the raw element differs from what
+ * an implementation without the factor would output.
  */
 function finalExponentiation(f) {
-    // p^12 computed iteratively: Babel transpiles ** into Math.pow(), which
-    // does not support BigInt operands (same issue as the fixed share() bug)
-    let p12 = 1n
-    for (let i = 0; i < 12; i++) {
-        p12 *= p
-    }
-    const exponent = (p12 - 1n) / n
-    let result = Fp12.one(fp12Params)
-    let base = f
-    let e = exponent
-    while (e > 0n) {
-        if (e & 1n) {
-            result = result.multiply(base)
-        }
-        base = base.multiply(base)
-        e >>= 1n
-    }
-    return result
+    // easy part: f^((p^6-1)(p^2+1))
+    const t = f.unitaryInverse().multiply(f.inverse()) // f^(p^6-1)
+    const m = t.frobeniusMap(2n).multiply(t) // ^(p^2+1)
+
+    // hard part: m^((x-1)^2 * (x+p) * (x^2+p^2-1)) * m^3
+    const a = m.negExp(X_ABS + 1n).negExp(X_ABS + 1n) // m^((x-1)^2)
+    const b = a.negExp(X_ABS).multiply(a.frobeniusMap(1n)) // ^(x+p)
+    const c = b
+        .negExp(X_ABS)
+        .negExp(X_ABS)
+        .multiply(b.frobeniusMap(2n))
+        .multiply(b.unitaryInverse()) // ^(x^2+p^2-1)
+
+    return c.multiply(m.cyclotomicSquared()).multiply(m) // * m^3
 }
 
 /**

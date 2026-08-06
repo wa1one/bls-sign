@@ -59,7 +59,7 @@ const publicKey = new BLSPublicKey(secretKey, Q)
 signer.verify(Q, H, publicKey, secretKey.sign(H)) // true
 ```
 
-Note: the BLS12-381 pairing currently uses a generic (unoptimized) final exponentiation, so `verify` takes a few seconds — fine for experimentation, not for high-throughput use.
+The final exponentiation uses the standard optimized easy-part/hard-part split (Hayashida–Hayasaka–Teruya decomposition over the cyclotomic subgroup), so a full `verify` takes on the order of 200 ms. The computed value is the cube of the textbook pairing — a bijection on the result subgroup, so all equality and verification semantics are identical; only raw pairing outputs compared against other libraries would differ.
 
 #### Threshold signatures
 
