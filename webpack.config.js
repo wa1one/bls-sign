@@ -11,7 +11,6 @@ module.exports = [
         },
 
         externals: {
-            'bigint-crypto-utils': 'bigint-crypto-utils',
             'alg-field': 'alg-field',
             'alg-bn': 'alg-bn',
         },
@@ -69,7 +68,9 @@ module.exports = [
         },
         target: ['web', 'es6'],
         resolve: {
-            fallback: {},
+            alias: {
+                crypto: path.resolve(__dirname, 'src/cryptoRandomBytesBrowser.js'),
+            },
         },
     },
 ]

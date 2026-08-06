@@ -1,4 +1,4 @@
-const crypto = require('bigint-crypto-utils')
+const crypto = require('./random')
 const { Parameters } = require('alg-field')
 
 const { BN128Fp, BN128Fp2 } = require('./pairing/BN128')
@@ -100,8 +100,10 @@ class BLSPolynomial {
     }
     static eval(msk, x) {
         let s = 0n
+        let xPow = 1n // x^0
         for (let i = 0; i < msk.length; i++) {
-            s += msk[i].s * x ** BigInt(i)
+            s += msk[i].s * xPow
+            xPow *= x
         }
         return s
     }
@@ -154,25 +156,28 @@ class BLSPolynomial {
 }
 /** BLS signature signer */
 class BLSSigner {
-    constructor(bitLength) {
-        this.G = BN128Fp.create(1n, 2n)
-
-        this.G2 = BN128Fp2.create(
+    constructor(
+        bitLength,
+        G = BN128Fp.create(1n, 2n),
+        G2 = BN128Fp2.create(
             10857046999023057135944570762232829481370756359578518086990519993285655852781n,
             11559732032986387107991004021392285783925812861821192530917403151452391805634n,
             8495653923123431417604973247489272438418190587263600148770280649306958101930n,
             4082367875863433681332203403145435568316851327593401208105741076214120093531n
         )
+    ) {
+        this.G = G
+        this.G2 = G2
     }
 
     getRandomPointOnE = () =>
         this.G.multiply(
-            crypto.randBetween(2n ** 2n * BigInt(Parameters.p.bitLength()))
+            crypto.randBetween(4n * BigInt(Parameters.p.bitLength()))
         )
 
     getRandomPointOnEt = () =>
         this.G2.multiply(
-            crypto.randBetween(2n ** 2n * BigInt(Parameters.p.bitLength()))
+            crypto.randBetween(4n * BigInt(Parameters.p.bitLength()))
         )
 
     getPairing = () => this.pair

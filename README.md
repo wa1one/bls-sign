@@ -4,6 +4,18 @@ npm: [bls-sign](https://www.npmjs.com/package/bls-sign)
 
 ### This package is still being downloaded ~10 times a week after 6 years! I decided to publish some small updates using new AI features.
 
+### Changelog
+
+Highlights from the latest round of fixes and cleanup:
+
+- **Fixed threshold signature aggregation** (`BLSSignature.recover`) — it threw on any call, because it used raw arithmetic operators on elliptic-curve point objects instead of their `.multiply()`/`.add()` methods.
+- **Fixed several curve-point bugs**: `BN128Fp2.toAffine()` crashed on the identity/zero point; `isValid()` had a dead type check that never actually validated anything; `eq()` compared raw Jacobian coordinates and could report two mathematically-equal points as unequal.
+- **Fixed `BLSSecretKey.getPublicKey()`** — previously always threw; now correctly delegates to `BLSPublicKey`.
+- **Removed the `bigint-crypto-utils` dependency** — `randBytesSync`/`randBetween` are now implemented locally (backed by Node's `crypto.randomBytes`, with a Web Crypto API fallback for the browser bundle), verified against the original implementation for identical behavior.
+- **Fixed the browser bundle** — Babel's transform of the `**` exponentiation operator doesn't support `BigInt` operands, which silently broke `share()` and the random-point helpers whenever the library was bundled for the browser. Rewritten to avoid `**` on `BigInt` values entirely.
+- **`BLSSigner` and `Pairing.ate()` now accept optional parameters** for the curve's fixed generator points and pairing loop constants (previously hardcoded), while staying backward compatible with existing calls.
+- Added comprehensive test coverage (7 → 19 tests) and full API documentation (this README).
+
 ### Boneh–Lynn–Shacham signature scheme
 
 The Boneh–Lynn–Shacham (BLS) signature scheme allows a user to verify that a signer is authentic. The scheme uses a bilinear pairing for verification, and signatures are elements of an elliptic curve group. Working in an elliptic curve group provides some defense against index calculus attacks, allowing shorter signatures than FDH signatures for a similar level of security. Signatures produced by the BLS signature scheme are often referred to as short signatures, BLS short signatures, or simply BLS signatures. The signature scheme is provably secure (it is existentially unforgeable under adaptive chosen-message attacks), assuming both the existence of random oracles and the intractability of the computational Diffie–Hellman problem in a gap Diffie–Hellman group.
@@ -50,7 +62,7 @@ recovered.s === secretKey.s // true
 
 Holds the curve's fixed generator points and provides the top-level sign/verify helpers.
 
-- `new BLSSigner(bitLength)` — creates `G` (a generator point on G1) and `G2` (a generator point on G2). `bitLength` is currently unused.
+- `new BLSSigner(bitLength, G, G2)` — creates `G` (a generator point on G1) and `G2` (a generator point on G2); both default to the curve's standard generators and can be overridden. `bitLength` is currently unused.
 - `.G`, `.G2` — the fixed generator points.
 - `.getRandomPointOnE()` — a random scalar multiple of `G` (a random point on G1).
 - `.getRandomPointOnEt()` — a random scalar multiple of `G2` (a random point on G2); typically used as the "message" point `H`.

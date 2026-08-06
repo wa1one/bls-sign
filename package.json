@@ -1,6 +1,6 @@
 {
     "name": "bls-sign",
-    "version": "0.13.10",
+    "version": "0.13.11",
     "description": "BLS threshold signatures creation and verification",
     "main": "dist/index.js",
     "jsnext:main": "main.mjs",
@@ -31,13 +31,11 @@
         "@eslint/js": "^10.0.1",
         "babel-loader": "^8.1.0",
         "buffer": "^5.6.0",
-        "crypto-browserify": "^3.12.0",
         "eslint": "^10.8.0",
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.8.0",
         "jest": "^26.5.3",
         "regenerator-runtime": "^0.13.7",
-        "stream-browserify": "^3.0.0",
         "webpack": "^5.0.0",
         "webpack-cli": "^4.3.12"
     },
@@ -48,7 +46,6 @@
     "homepage": "https://github.com/wa1one/bls-sign#readme",
     "dependencies": {
         "alg-bn": "^0.1.10",
-        "alg-field": "^0.1.10",
-        "bigint-crypto-utils": "^3.0.8"
+        "alg-field": "^0.1.10"
     }
 }

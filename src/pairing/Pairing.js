@@ -79,10 +79,7 @@ class Pairing {
         return xt.subtract(x1)
     }
 
-    ate(P, Q) {
-        const ateCount = 29793968203157093288n
-        const logAteCount = 63n
-
+    ate(P, Q, ateCount = 29793968203157093288n, logAteCount = 63n) {
         let R = Q
         let f = this.E.bn.Fp12_1
 

@@ -25,6 +25,14 @@ module.exports = [
             },
         },
     },
+    {
+        files: ['src/cryptoRandomBytesBrowser.js'],
+        languageOptions: {
+            globals: {
+                ...globals.browser,
+            },
+        },
+    },
     prettier,
     {
         ignores: ['dist/**', 'dist-web/**', 'node_modules/**'],
