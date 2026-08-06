@@ -140,8 +140,8 @@ Holds the curve's fixed generator points and provides the top-level sign/verify 
 Internal helper backing the threshold-sharing methods above:
 
 - `.eval(msk, x)` — evaluates the sharing polynomial (coefficients `msk`, each with an `.s`) at `x`.
-- `.calcDelta(ids)` — computes the Lagrange basis coefficients at `x = 0` for an array of share ids. Throws if fewer than 2 ids are given, or if two ids are equal.
-- `.lagrange(vec)` — reconstructs either a secret scalar (if entries have `.s`) or an aggregated signature point (if entries have `.sH`) via Lagrange interpolation at `x = 0`.
+- `.calcDelta(ids, modulus)` — computes the Lagrange basis coefficients at `x = 0` for an array of share ids. These are fractions in general (for ids `1,2,4` the first is `8/3`), so pass the group order as `modulus` to get them as exact modular values; without a modulus they are only returned when every coefficient happens to be an integer, and an inexact set throws rather than silently truncating. Throws if fewer than 2 ids are given, or if two ids are equal.
+- `.lagrange(vec)` — reconstructs either a secret scalar (if entries have `.s`, via exact rational interpolation) or an aggregated signature point (if entries have `.sH`, via coefficients reduced modulo the curve's group order) at `x = 0`. Throws if given fewer than two shares.
 
 #### `Parameters`
 

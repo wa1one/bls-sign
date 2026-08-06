@@ -11,6 +11,40 @@ const {
     Parameters,
 } = require('./src')
 
+/** Every size-k subset of items, preserving order */
+function combinations(items, k) {
+    if (k === 0) return [[]]
+    if (items.length < k) return []
+    const [head, ...tail] = items
+    return combinations(tail, k - 1)
+        .map((rest) => [head, ...rest])
+        .concat(combinations(tail, k))
+}
+
+function binomial(n, k) {
+    let result = 1
+    for (let i = 0; i < k; i++) {
+        result = (result * (n - i)) / (i + 1)
+    }
+    return Math.round(result)
+}
+
+/**
+ * Shares of an explicit polynomial, so that "fewer than k shares must fail"
+ * assertions cannot flake: a randomly generated polynomial can have a zero
+ * leading coefficient, which genuinely lowers its degree and its threshold.
+ * coeffs[0] is the secret.
+ */
+function sharesFromPolynomial(coeffs, n) {
+    const msk = coeffs.map((c) => ({ s: c }))
+    return Array.from({ length: n }, (unused, i) => {
+        const id = i + 1
+        const share = new BLSSecretKey(BLSPolynomial.eval(msk, BigInt(id)))
+        share.id = id
+        return share
+    })
+}
+
 describe('Fields', function () {
     test('Field without extensions test', function () {
         const _2 = new Field(2n)
@@ -316,6 +350,47 @@ describe('BLSPolynomial', function () {
         expect(() => BLSPolynomial.calcDelta([1, 1])).toThrow()
     })
 
+    test('calcDelta returns the exact Lagrange coefficients when they are integers', function () {
+        // ids 1,2,3: coefficients are 6/2, 3/-1, 2/2
+        expect(BLSPolynomial.calcDelta([1, 2, 3])).toEqual([3n, -3n, 1n])
+    })
+
+    test('calcDelta refuses to truncate non-integer coefficients', function () {
+        // ids 1,2,4 give 8/3, 4/-2, 2/6 - integer division silently produced
+        // [2, -2, 0] here, which is what corrupted recovery for most subsets
+        expect(() => BLSPolynomial.calcDelta([1, 2, 4])).toThrow()
+        expect(() => BLSPolynomial.calcDelta([1, 3, 5])).toThrow()
+    })
+
+    test('calcDelta with a modulus reproduces the coefficients exactly', function () {
+        const order = BN128Fp2.n
+
+        // integer-valued coefficients agree with the modular ones
+        const plain = BLSPolynomial.calcDelta([1, 2, 3])
+        const modular = BLSPolynomial.calcDelta([1, 2, 3], order)
+        plain.forEach((d, i) =>
+            expect(modular[i]).toEqual(((d % order) + order) % order)
+        )
+
+        // and the fractional case is now representable: 8/3 mod order must
+        // satisfy delta * 3 == 8 (mod order)
+        const frac = BLSPolynomial.calcDelta([1, 2, 4], order)
+        expect((frac[0] * 3n) % order).toEqual(8n)
+    })
+
+    test('interpolating a known polynomial at x = 0 works from any id subset', function () {
+        // f(x) = 123 + 45x + 67x^2, evaluated at ids 1..6
+        const msk = [{ s: 123n }, { s: 45n }, { s: 67n }]
+        const shares = [1, 2, 3, 4, 5, 6].map((id) => ({
+            id,
+            s: BLSPolynomial.eval(msk, BigInt(id)),
+        }))
+
+        for (const subset of combinations(shares, 3)) {
+            expect(BLSPolynomial.lagrange(subset)).toEqual(123n)
+        }
+    })
+
     test('getMasterSecretKey validates k and keeps the original key as the constant term', function () {
         expect(() => new BLSSecretKey(5).getMasterSecretKey(1)).toThrow()
         expect(() => new BLSSecretKey(5).getMasterSecretKey(0)).toThrow()
@@ -362,6 +437,110 @@ describe('Threshold signature aggregation', function () {
 
         expect(recovered2.sH.eq(directSig.sH)).toBeFalsy()
     })
+
+    test('EVERY k-subset of signature shares aggregates to the same signature', function () {
+        // The counterpart of the secret-recovery regression: aggregating
+        // partial signatures uses the same Lagrange coefficients, so before
+        // the fix only id subsets whose coefficients happened to be integers
+        // (such as the first three) produced a usable signature.
+        const signer = new BLSSigner(256)
+        const H = signer.G2.multiply(987654321n)
+
+        for (const [n, k] of [
+            [5, 3],
+            [6, 3],
+            [4, 2],
+            [5, 5],
+        ]) {
+            const prv0 = new BLSSecretKey()
+            const directSig = prv0.sign(H)
+            const vec = prv0.share(n, k)
+
+            for (const subset of combinations(vec, k)) {
+                const aggregated = new BLSSignature().recover(
+                    subset.map((share) => share.sign(H))
+                )
+                expect({
+                    ids: subset.map((s) => s.id),
+                    matches: aggregated.sH.eq(directSig.sH),
+                }).toEqual({
+                    ids: subset.map((s) => s.id),
+                    matches: true,
+                })
+            }
+        }
+    })
+
+    test('every aggregated k-subset verifies against the master public key', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+        const H = signer.G2.multiply(987654321n)
+
+        const prv0 = new BLSSecretKey()
+        const pub0 = new BLSPublicKey(prv0, Q)
+        const vec = prv0.share(5, 3)
+
+        for (const subset of combinations(vec, 3)) {
+            const aggregated = new BLSSignature().recover(
+                subset.map((share) => share.sign(H))
+            )
+            expect({
+                ids: subset.map((s) => s.id),
+                valid: signer.verify(Q, H, pub0, aggregated),
+            }).toEqual({ ids: subset.map((s) => s.id), valid: true })
+        }
+    }, 120000)
+
+    test('no subset smaller than k aggregates to a verifying signature', function () {
+        const signer = new BLSSigner(256)
+        const Q = signer.G.multiply(4n)
+        const H = signer.G2.multiply(987654321n)
+
+        // explicit degree-3 polynomial so the threshold is genuinely 4
+        const secret = 123n
+        const prv0 = new BLSSecretKey(secret)
+        const pub0 = new BLSPublicKey(prv0, Q)
+        const directSig = prv0.sign(H)
+        const vec = sharesFromPolynomial([secret, 45n, 67n, 89n], 5)
+
+        for (const subset of combinations(vec, 3)) {
+            const aggregated = new BLSSignature().recover(
+                subset.map((share) => share.sign(H))
+            )
+            expect(aggregated.sH.eq(directSig.sH)).toBeFalsy()
+            expect(signer.verify(Q, H, pub0, aggregated)).toBeFalsy()
+        }
+    }, 120000)
+
+    test('aggregation works on BLS12-381 for every k-subset', function () {
+        const signer = BLSSigner.bls12381(256)
+        const Q = signer.G.multiply(4n)
+        const H = signer.G2.multiply(987654321n)
+
+        const prv0 = new BLSSecretKey()
+        const pub0 = new BLSPublicKey(prv0, Q)
+        const directSig = prv0.sign(H)
+        const vec = prv0.share(5, 3)
+
+        for (const subset of combinations(vec, 3)) {
+            const aggregated = new BLSSignature().recover(
+                subset.map((share) => share.sign(H))
+            )
+            expect({
+                ids: subset.map((s) => s.id),
+                matches: aggregated.sH.eq(directSig.sH),
+            }).toEqual({
+                ids: subset.map((s) => s.id),
+                matches: true,
+            })
+        }
+
+        // a non-contiguous subset must also pass a real pairing check
+        const aggregated = new BLSSignature().recover(
+            [vec[0], vec[2], vec[4]].map((share) => share.sign(H))
+        )
+        expect(signer.verify(Q, H, pub0, aggregated)).toBeTruthy()
+    }, 120000)
 })
 
 describe('Signature security properties', function () {
@@ -474,16 +653,91 @@ describe('Threshold scheme parameter variations', function () {
         expect(recovered6.s).not.toEqual(prv0.s)
     })
 
-    test('non-contiguous share subsets reconstruct the secret correctly', function () {
+    test('EVERY k-subset of shares reconstructs the secret, not just the first k', function () {
+        // Regression test: Lagrange coefficients at x = 0 are fractions in
+        // general (for ids 1,2,4 the first is 8/3). Truncating them with
+        // integer division happened to be exact for ids 1,2,3 but silently
+        // produced a wrong secret for half of all subsets.
+        for (const [n, k] of [
+            [5, 3],
+            [6, 3],
+            [7, 4],
+            [4, 2],
+            [5, 5],
+            [8, 2],
+        ]) {
+            const prv0 = new BLSSecretKey()
+            const vec = prv0.share(n, k)
+
+            const subsets = combinations(vec, k)
+            expect(subsets.length).toBe(binomial(n, k))
+
+            for (const subset of subsets) {
+                const recovered = new BLSSecretKey()
+                recovered.recover(subset)
+                expect({
+                    ids: subset.map((s) => s.id),
+                    secret: recovered.s,
+                }).toEqual({
+                    ids: subset.map((s) => s.id),
+                    secret: prv0.s,
+                })
+            }
+        }
+    })
+
+    test('every k-subset works for randomly generated secrets too', function () {
+        for (let trial = 0; trial < 10; trial++) {
+            const prv0 = new BLSSecretKey()
+            const vec = prv0.share(6, 3)
+            for (const subset of combinations(vec, 3)) {
+                const recovered = new BLSSecretKey()
+                recovered.recover(subset)
+                expect(recovered.s).toEqual(prv0.s)
+            }
+        }
+    })
+
+    test('no subset smaller than k reconstructs the secret', function () {
+        // explicit degree-3 polynomial (non-zero leading coefficient) so the
+        // threshold is genuinely 4
+        const secret = 123n
+        const vec = sharesFromPolynomial([secret, 45n, 67n, 89n], 6)
+
+        for (let size = 2; size < 4; size++) {
+            for (const subset of combinations(vec, size)) {
+                const recovered = new BLSSecretKey()
+                recovered.recover(subset)
+                expect(recovered.s).not.toEqual(secret)
+            }
+        }
+
+        // and all 4-subsets do reconstruct it
+        for (const subset of combinations(vec, 4)) {
+            const recovered = new BLSSecretKey()
+            recovered.recover(subset)
+            expect(recovered.s).toEqual(secret)
+        }
+    })
+
+    test('a zero leading coefficient never lowers the effective threshold', function () {
+        // getMasterSecretKey draws single random bytes, so without a guard the
+        // top coefficient would be 0 about 1 in 256 times, quietly turning a
+        // k-of-n scheme into (k-1)-of-n
+        for (let trial = 0; trial < 2000; trial++) {
+            const msk = new BLSSecretKey(7).getMasterSecretKey(4)
+            expect(msk).toHaveLength(4)
+            expect(msk[3].s).not.toEqual(0n)
+        }
+    })
+
+    test('recover rejects fewer than two shares and duplicate ids', function () {
         const prv0 = new BLSSecretKey()
-        const vec = prv0.share(6, 3)
+        const vec = prv0.share(5, 3)
 
-        // ids 2, 4, 6 instead of the first 3
-        const subset = [vec[1], vec[3], vec[5]]
-
-        const recovered = new BLSSecretKey()
-        recovered.recover(subset)
-        expect(recovered.s).toEqual(prv0.s)
+        expect(() => new BLSSecretKey().recover([])).toThrow()
+        expect(() => new BLSSecretKey().recover([vec[0]])).toThrow()
+        expect(() => new BLSSecretKey().recover([vec[0], vec[0]])).toThrow()
     })
 
     test('k equal to n requires every share to reconstruct the secret', function () {

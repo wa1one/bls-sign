@@ -40,6 +40,12 @@ class BLSSecretKey {
         for (let i = 1; i < k; i++) {
             msk[i] = new BLSSecretKey()
         }
+        // The leading coefficient must not be zero: a zero there drops the
+        // polynomial's degree below k-1, so k-1 shares would be enough to
+        // reconstruct the secret and the scheme would not hold its threshold.
+        while (msk[k - 1].s === 0n) {
+            msk[k - 1] = new BLSSecretKey()
+        }
         return msk
     }
 
@@ -88,6 +94,18 @@ class BLSPublicKey {
     }
 }
 
+/** Greatest common divisor, used to keep exact-fraction arithmetic reduced */
+function gcd(a, b) {
+    a = a < 0n ? -a : a
+    b = b < 0n ? -b : b
+    while (b) {
+        const t = a % b
+        a = b
+        b = t
+    }
+    return a
+}
+
 /** Class representing math polynomial */
 class BLSPolynomial {
     static init(s, k) {
@@ -110,49 +128,102 @@ class BLSPolynomial {
         }
         return s
     }
-    static calcDelta(S) {
+    /**
+     * Numerator and denominator of the Lagrange basis coefficient at x = 0
+     * for the i-th id: prod_{j != i} S[j] / prod_{j != i} (S[j] - S[i]).
+     *
+     * These are genuine fractions in general (for ids 1,2,4 the first one is
+     * 8/3), so they are only representable as integers for specific id sets -
+     * hence the separate exact-rational and modular paths below.
+     */
+    static basisFraction(S, i) {
+        let num = 1n
+        let den = 1n
+        for (let j = 0; j < S.length; j++) {
+            if (j === i) continue
+            const v = BigInt(S[j]) - BigInt(S[i])
+            if (v === 0n) throw Error('S has same id' + i + ' ' + j)
+            num *= BigInt(S[j])
+            den *= v
+        }
+        return { num, den }
+    }
+
+    /**
+     * Lagrange basis coefficients at x = 0.
+     *
+     * With a modulus (the group order for the curve in use) the coefficients
+     * are computed with modular inverses and are always exact. Without one
+     * they can only be returned when every fraction happens to divide evenly,
+     * so an inexact set throws rather than silently truncating - truncation
+     * produced wrong secrets and signatures for most id subsets.
+     */
+    static calcDelta(S, modulus) {
         const k = S.length
         if (k < 2) throw Error('bad size' + k)
         const delta = new Array(k)
-        let a = BigInt(S[0])
-        for (let i = 1; i < k; i++) {
-            a *= BigInt(S[i])
-        }
         for (let i = 0; i < k; i++) {
-            let b = BigInt(S[i])
-            for (let j = 0; j < k; j++) {
-                if (j !== i) {
-                    const v = BigInt(S[j]) - BigInt(S[i])
-                    if (v === 0n) throw Error('S has same id' + i + ' ' + j)
-                    b *= v
+            const { num, den } = BLSPolynomial.basisFraction(S, i)
+            if (modulus === undefined) {
+                if (num % den !== 0n) {
+                    throw Error(
+                        'Lagrange coefficient for id ' +
+                            S[i] +
+                            ' is not an integer (' +
+                            num +
+                            '/' +
+                            den +
+                            '); pass the group order as a modulus'
+                    )
                 }
+                delta[i] = num / den
+            } else {
+                delta[i] = (num * den.mod(modulus).modInv(modulus)).mod(
+                    modulus
+                )
             }
-            delta[i] = a / b
         }
         return delta
     }
 
     static lagrange(vec) {
-        let S = new Array(vec.length)
-        for (let i = 0; i < vec.length; i++) {
-            S[i] = vec[i].id
-        }
-        const delta = BLSPolynomial.calcDelta(S)
+        if (vec.length < 2) throw Error('bad size' + vec.length)
+        const S = vec.map((v) => v.id)
 
         if (vec[0].s !== undefined) {
-            let r = 0n
-            for (let i = 0; i < delta.length; i++) {
-                r += vec[i].s * delta[i]
+            // Exact rational interpolation at x = 0. The shares are integer
+            // evaluations of an integer-coefficient polynomial, so the sum of
+            // s_i * (num_i / den_i) is exactly f(0) - but the individual
+            // terms are not integers, so they are accumulated as a fraction
+            // and divided once at the end. This keeps secret recovery
+            // independent of any curve's group order.
+            let num = 0n
+            let den = 1n
+            for (let i = 0; i < S.length; i++) {
+                const b = BLSPolynomial.basisFraction(S, i)
+                num = num * b.den + vec[i].s * b.num * den
+                den = den * b.den
+                const g = gcd(num, den)
+                if (g > 1n) {
+                    num /= g
+                    den /= g
+                }
             }
-            return r
+            if (num % den !== 0n) {
+                throw Error('recovered secret is not an integer')
+            }
+            return num / den
         }
+
+        // Signature shares are curve points, so the coefficients are reduced
+        // modulo the group order; scalar multiplication is defined mod that
+        // order, which makes the result identical to the rational one.
+        const order = vec[0].sH.constructor.n
+        const delta = BLSPolynomial.calcDelta(S, order)
 
         let r = vec[0].sH.constructor.ZERO
         for (let i = 0; i < delta.length; i++) {
-            const d = delta[i]
-            const term =
-                d < 0n ? vec[i].sH.multiply(-d).neg() : vec[i].sH.multiply(d)
-            r = r.add(term)
+            r = r.add(vec[i].sH.multiply(delta[i]))
         }
         return r
     }
