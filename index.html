@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>bls-sign — interactive demo</title>
+<style>
+    :root {
+        --bg: #f6f7f9; --panel: #ffffff; --text: #1a1f27; --muted: #5b6472;
+        --border: #d9dee6; --accent: #2952cc; --ok: #177245; --bad: #b3261e;
+        --mono-bg: #eef1f5;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg: #14171c; --panel: #1d2229; --text: #e8ebef; --muted: #9aa4b1;
+            --border: #333b46; --accent: #7ba3ff; --ok: #59c98a; --bad: #ff8a80;
+            --mono-bg: #12151a;
+        }
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { max-width: 880px; margin: 0 auto; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    section {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 10px; padding: 16px 18px; margin-bottom: 14px;
+    }
+    h2 { font-size: 15px; margin: 0 0 10px; }
+    label { margin-right: 14px; }
+    input[type="text"], input[type="number"] {
+        background: var(--mono-bg); color: var(--text);
+        border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px;
+        font: inherit;
+    }
+    input[type="number"] { width: 70px; }
+    button {
+        background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+        padding: 7px 14px; font: inherit; cursor: pointer; margin: 2px 6px 2px 0;
+    }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .out {
+        background: var(--mono-bg); border: 1px solid var(--border);
+        border-radius: 6px; padding: 8px 10px; margin-top: 8px;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        word-break: break-all; max-height: 130px; overflow-y: auto;
+        white-space: pre-wrap;
+    }
+    .status { font-weight: 600; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .muted { color: var(--muted); }
+    .time { color: var(--muted); font-size: 13px; margin-left: 8px; }
+    .shares label { display: inline-block; margin: 4px 12px 4px 0; }
+    footer { color: var(--muted); font-size: 13px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+    <h1>bls-sign</h1>
+    <p class="sub">Interactive demo — BLS signatures and threshold signatures over pairing-friendly curves, in pure JavaScript.</p>
+
+    <section>
+        <h2>1 · Curve</h2>
+        <label><input type="radio" name="curve" value="bn254" checked /> alt_bn128 (BN254, default)</label>
+        <label><input type="radio" name="curve" value="bls12381" /> BLS12-381</label>
+        <div class="out" id="curveOut">initializing…</div>
+    </section>
+
+    <section>
+        <h2>2 · Secret key</h2>
+        <button id="btnRandomKey">Random secret</button>
+        <label>or set: <input type="text" id="secretInput" placeholder="e.g. 42" size="10" /></label>
+        <button id="btnSetKey">Use</button>
+        <div class="out" id="keyOut">no key yet</div>
+    </section>
+
+    <section>
+        <h2>3 · Message</h2>
+        <label>Text: <input type="text" id="msgInput" value="hello bls" size="34" /></label>
+        <span class="muted">(SHA-256 → scalar → point on G2; a demo stand-in for real hash-to-curve)</span>
+        <div class="out" id="msgOut"></div>
+    </section>
+
+    <section>
+        <h2>4 · Sign &amp; verify</h2>
+        <button id="btnSign">Sign</button>
+        <button id="btnVerify" disabled>Verify</button>
+        <button id="btnVerifyTamperMsg" disabled>Verify vs. different message</button>
+        <button id="btnVerifyTamperKey" disabled>Verify vs. different key</button>
+        <div class="out" id="sigOut">no signature yet</div>
+        <div id="verifyOut" style="margin-top:8px"></div>
+    </section>
+
+    <section>
+        <h2>5 · Threshold signatures (k of n)</h2>
+        <label>n: <input type="number" id="nInput" value="5" min="2" max="10" /></label>
+        <label>k: <input type="number" id="kInput" value="3" min="2" max="10" /></label>
+        <button id="btnSplit">Split secret</button>
+        <div class="shares" id="sharesBox"></div>
+        <button id="btnAggregate" disabled>Aggregate selected shares &amp; verify</button>
+        <div class="out" id="thresholdOut">split the secret first</div>
+    </section>
+
+    <footer>
+        Demo only: secrets default to a single random byte and messages are mapped to
+        curve points by scalar multiplication of a SHA-256 digest, which is not a secure
+        hash-to-curve. See the README for the API and its caveats.
+    </footer>
+</main>
+
+<script src="./dist-web/index.js"></script>
+<script>
+    const lib = window['bls-sign']
+    const { BLSSigner, BLSSecretKey, BLSPublicKey, BLSSignature } = lib
+
+    const $ = (id) => document.getElementById(id)
+    const fmt = (ms) => (ms < 1 ? ms.toFixed(2) : ms.toFixed(1)) + ' ms'
+    const short = (s) => {
+        s = String(s)
+        return s.length > 700 ? s.slice(0, 700) + ' …' : s
+    }
+
+    let signer, Q, sk, pk, H, sig, shares
+
+    function timed(fn) {
+        const t0 = performance.now()
+        const value = fn()
+        return { value, ms: performance.now() - t0 }
+    }
+
+    function initCurve(which) {
+        const { value, ms } = timed(() =>
+            which === 'bls12381' ? BLSSigner.bls12381(256) : new BLSSigner(256)
+        )
+        signer = value
+        Q = signer.G.multiply(4n)
+        sk = pk = H = sig = shares = null
+        $('curveOut').textContent =
+            (which === 'bls12381' ? 'BLS12-381' : 'alt_bn128 (BN254)') +
+            ' initialized in ' + fmt(ms) + '\nQ (global generator · 4) = ' + short(Q)
+        $('keyOut').textContent = 'no key yet'
+        $('sigOut').textContent = 'no signature yet'
+        $('verifyOut').textContent = ''
+        $('sharesBox').innerHTML = ''
+        $('thresholdOut').textContent = 'split the secret first'
+        setButtons()
+    }
+
+    function setButtons() {
+        $('btnVerify').disabled = !sig
+        $('btnVerifyTamperMsg').disabled = !sig
+        $('btnVerifyTamperKey').disabled = !sig
+        $('btnAggregate').disabled = !shares
+    }
+
+    function setKey(secretKey) {
+        sk = secretKey
+        pk = new BLSPublicKey(sk, Q)
+        sig = shares = null
+        $('keyOut').textContent = 's (secret) = ' + sk + '\nsQ (public key) = ' + short(pk)
+        $('sigOut').textContent = 'no signature yet'
+        $('verifyOut').textContent = ''
+        $('sharesBox').innerHTML = ''
+        $('thresholdOut').textContent = 'split the secret first'
+        setButtons()
+    }
+
+    async function messagePoint(text) {
+        const bytes = new TextEncoder().encode(text)
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+        let scalar = 0n
+        for (const b of digest) scalar = (scalar << 8n) + BigInt(b)
+        return signer.G2.multiply(scalar)
+    }
+
+    $('btnRandomKey').onclick = () => setKey(new BLSSecretKey())
+    $('btnSetKey').onclick = () => {
+        try {
+            setKey(new BLSSecretKey(BigInt($('secretInput').value)))
+        } catch (e) {
+            $('keyOut').textContent = 'invalid secret: ' + e.message
+        }
+    }
+
+    $('btnSign').onclick = async () => {
+        if (!sk) setKey(new BLSSecretKey())
+        H = await messagePoint($('msgInput').value)
+        $('msgOut').textContent = 'H (message point on G2) = ' + short(H)
+        const { value, ms } = timed(() => sk.sign(H))
+        sig = value
+        $('sigOut').textContent = 'sH (signature) = ' + short(sig) + '\nsigned in ' + fmt(ms)
+        $('verifyOut').textContent = ''
+        setButtons()
+    }
+
+    function showVerify(label, result, ms, expectValid) {
+        const cls = result === expectValid ? (result ? 'ok' : 'ok') : 'bad'
+        $('verifyOut').innerHTML =
+            label + ': <span class="status ' + cls + '">' +
+            (result ? 'VALID' : 'INVALID') + '</span>' +
+            '<span class="time">' + fmt(ms) + '</span>'
+    }
+
+    $('btnVerify').onclick = () => {
+        const { value, ms } = timed(() => signer.verify(Q, H, pk, sig))
+        showVerify('signature vs. original message and key', value, ms, true)
+    }
+
+    $('btnVerifyTamperMsg').onclick = async () => {
+        const H2 = await messagePoint($('msgInput').value + ' (tampered)')
+        const { value, ms } = timed(() => signer.verify(Q, H2, pk, sig))
+        showVerify('signature vs. a different message', value, ms, false)
+    }
+
+    $('btnVerifyTamperKey').onclick = () => {
+        let other = new BLSSecretKey()
+        while (other.s === sk.s) other = new BLSSecretKey()
+        const pk2 = new BLSPublicKey(other, Q)
+        const { value, ms } = timed(() => signer.verify(Q, H, pk2, sig))
+        showVerify('signature vs. a different public key', value, ms, false)
+    }
+
+    $('btnSplit').onclick = () => {
+        if (!sk) setKey(new BLSSecretKey())
+        const n = parseInt($('nInput').value, 10)
+        const k = parseInt($('kInput').value, 10)
+        try {
+            shares = sk.share(n, k)
+        } catch (e) {
+            $('thresholdOut').textContent = 'share(' + n + ', ' + k + ') threw: ' + e.message
+            shares = null
+            setButtons()
+            return
+        }
+        $('sharesBox').innerHTML = shares
+            .map(
+                (s, i) =>
+                    '<label><input type="checkbox" data-i="' + i + '"' +
+                    (i < k ? ' checked' : '') + ' /> share #' + s.id + '</label>'
+            )
+            .join('')
+        $('thresholdOut').textContent =
+            'secret split into ' + n + ' shares, any ' + k +
+            ' of which reconstruct it. Pick shares and aggregate.'
+        setButtons()
+    }
+
+    $('btnAggregate').onclick = async () => {
+        H = await messagePoint($('msgInput').value)
+        const picked = [...document.querySelectorAll('#sharesBox input:checked')]
+            .map((cb) => shares[+cb.dataset.i])
+        if (picked.length < 2) {
+            $('thresholdOut').textContent = 'pick at least 2 shares'
+            return
+        }
+        const { value: agg, ms } = timed(() => {
+            const partials = picked.map((s) => s.sign(H))
+            return new BLSSignature().recover(partials)
+        })
+        const direct = sk.sign(H)
+        const matches = agg.sH.eq(direct.sH)
+        const { value: valid, ms: vms } = timed(() => signer.verify(Q, H, pk, agg))
+        const k = parseInt($('kInput').value, 10)
+        $('thresholdOut').textContent =
+            picked.length + ' of ' + shares.length + ' shares aggregated in ' + fmt(ms) +
+            '\naggregated signature equals directly-computed signature: ' + matches +
+            '\nverifies against the master public key: ' + valid + ' (' + fmt(vms) + ')' +
+            (picked.length < k
+                ? '\n(below the threshold k=' + k + ' — expected NOT to reconstruct)'
+                : '')
+    }
+
+    document.querySelectorAll('input[name="curve"]').forEach((r) => {
+        r.onchange = () => initCurve(r.value)
+    })
+
+    initCurve('bn254')
+    setKey(new BLSSecretKey())
+</script>
+</body>
+</html>
