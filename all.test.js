@@ -565,6 +565,50 @@ describe('BLS12-381 curve', function () {
     })
 
     test(
+        'hardcoded tower constants match the generic derivation',
+        function () {
+            const {
+                deriveFp2Params,
+                deriveFp6Params,
+                deriveFp12Params,
+            } = require('alg-field')
+            const d2 = deriveFp2Params(bls12381Params.p)
+            const d6 = deriveFp6Params(d2)
+            const d12 = deriveFp12Params(d6)
+
+            expect(
+                bls12381Params.fp2Params.nonResidue.eq(d2.nonResidue)
+            ).toBeTruthy()
+            d2.frobeniusCoeffsB.forEach((c, i) =>
+                expect(
+                    bls12381Params.fp2Params.frobeniusCoeffsB[i].eq(c)
+                ).toBeTruthy()
+            )
+
+            expect(
+                bls12381Params.fp6Params.nonResidue.eq(d6.nonResidue)
+            ).toBeTruthy()
+            d6.frobeniusCoeffsB.forEach((c, i) =>
+                expect(
+                    bls12381Params.fp6Params.frobeniusCoeffsB[i].eq(c)
+                ).toBeTruthy()
+            )
+            d6.frobeniusCoeffsC.forEach((c, i) =>
+                expect(
+                    bls12381Params.fp6Params.frobeniusCoeffsC[i].eq(c)
+                ).toBeTruthy()
+            )
+
+            d12.frobeniusCoeffsB.forEach((c, i) =>
+                expect(
+                    bls12381Params.fp12Params.frobeniusCoeffsB[i].eq(c)
+                ).toBeTruthy()
+            )
+        },
+        60000
+    )
+
+    test(
         'pairing is non-degenerate and bilinear',
         function () {
             const e1 = pairing(G, G2)

@@ -94,16 +94,20 @@ BN254 performance was flat from 0.13.11 through 0.13.14 — in particular, the `
 
 #### BLS12-381 (`BLSSigner.bls12381()`, added in 0.13.13)
 
-| Operation | 0.13.13 | 0.13.14 | 0.13.15 |
-| --- | --- | --- | --- |
-| first `bls12381()` call (tower parameter derivation, one-time) | 0.91 s | 0.95 s | 0.94 s |
-| `sign` | 0.73 ms | 0.77 ms | 0.75 ms |
-| `verify` | 3.36 s | 183 ms | **113 ms** |
-| signature aggregation (3 shares) | 0.69 ms | 0.68 ms | 0.69 ms |
+| Operation | 0.13.13 | 0.13.14 | 0.13.15 | 0.13.16 |
+| --- | --- | --- | --- | --- |
+| first `bls12381()` call (one-time) | 0.91 s | 0.95 s | 0.94 s | **~2 ms** |
+| `sign` | 0.73 ms | 0.77 ms | 0.75 ms | 0.75 ms |
+| `verify` | 3.36 s | 183 ms | **113 ms** | 112 ms |
+| signature aggregation (3 shares) | 0.69 ms | 0.68 ms | 0.69 ms | 0.69 ms |
 
 The 18x `verify` speedup in 0.13.14 comes from replacing the generic 4314-bit final exponentiation with the optimized easy-part/hard-part split (Hayashida–Hayasaka–Teruya decomposition over the cyclotomic subgroup); 0.13.15 adds the same merged single-product verify as BN254. Verification on the two curves is now equally fast (~110 ms). Signing and aggregation are scalar-multiplication-bound and unaffected.
 
-The first `BLSSigner.bls12381()` call pays a one-time ~0.9 s cost deriving the extension-tower parameters (non-residue search plus Frobenius coefficients); construct the signer once and reuse it.
+In 0.13.16 the extension-tower parameters (non-residue and all Frobenius coefficients) are hardcoded rather than derived by brute-force search on first use, eliminating the ~0.9 s one-time `bls12381()` cost; a unit test re-runs the generic derivation and asserts it still matches the hardcoded constants.
+
+#### Known issue: module load time
+
+Importing the library itself (`require('bls-sign')`) takes ~1.4 s since 0.13.13, up from ~7 ms in 0.13.11. The cause is in the `alg-field`/`alg-bn` 0.2.x dependencies: they derive their BN254 default tower parameters at import time using the same brute-force search, and `alg-bn` bundles its own copy of `alg-field`, paying the cost twice. (In the browser bundle, `alg-bn`'s share of this — ~0.7 s — is deferred until the first `bls12381()` call, since that is when the bundled module first executes.) This needs the same hardcode-or-lazy fix upstream in those packages; the ~2 ms figure in the table above is the cost of the factory itself once dependencies are loaded.
 
 Unpacked package size: 29 kB (0.13.11) → 43 kB (0.13.14), the increase being the BLS12-381 curve and pairing code.
 
