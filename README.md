@@ -2,20 +2,7 @@
 
 npm: [bls-sign](https://www.npmjs.com/package/bls-sign)
 
-### This package is still being downloaded ~10 times a week after 6 years! I decided to publish some small updates using new AI features.
-
-### Changelog
-
-Highlights from the latest round of fixes and cleanup:
-
-- **Fixed threshold signature aggregation** (`BLSSignature.recover`) — it threw on any call, because it used raw arithmetic operators on elliptic-curve point objects instead of their `.multiply()`/`.add()` methods.
-- **Fixed several curve-point bugs**: `BN128Fp2.toAffine()` crashed on the identity/zero point; `isValid()` had a dead type check that never actually validated anything; `eq()` compared raw Jacobian coordinates and could report two mathematically-equal points as unequal.
-- **Fixed `BLSSecretKey.getPublicKey()`** — previously always threw; now correctly delegates to `BLSPublicKey`.
-- **Removed the `bigint-crypto-utils` dependency** — `randBytesSync`/`randBetween` are now implemented locally (backed by Node's `crypto.randomBytes`, with a Web Crypto API fallback for the browser bundle), verified against the original implementation for identical behavior.
-- **Fixed the browser bundle** — Babel's transform of the `**` exponentiation operator doesn't support `BigInt` operands, which silently broke `share()` and the random-point helpers whenever the library was bundled for the browser. Rewritten to avoid `**` on `BigInt` values entirely.
-- **`BLSSigner` and `Pairing.ate()` now accept optional parameters** for the curve's fixed generator points and pairing loop constants (previously hardcoded), while staying backward compatible with existing calls.
-- **Added BLS12-381 curve support** via `BLSSigner.bls12381()` — a from-scratch optimal ate pairing over BLS12-381's M-type sextic twist, verified for non-degeneracy and bilinearity. alt_bn128 (BN254) remains the default; existing code is unaffected.
-- Added comprehensive test coverage (7 → 37 tests) and full API documentation (this README).
+### This package is still being downloaded ~10 times a week after 6 years! I decided to publish some small updates using new AI features. I am going to split 2 curves to 2 packages.
 
 ### Boneh–Lynn–Shacham signature scheme
 
@@ -81,25 +68,25 @@ Benchmarked against the actual packages published on npm, installed fresh with e
 
 #### BN254 (alt_bn128, default curve)
 
-| Operation | 0.13.11 | 0.13.13 | 0.13.14 | 0.13.15 |
-| --- | --- | --- | --- | --- |
-| `sign` | 0.76 ms | 0.70 ms | 0.72 ms | 0.71 ms |
-| `verify` | 176 ms | 175 ms | 170 ms | **111 ms** |
-| `getRandomPointOnEt` | 0.99 ms | 1.1 ms | 1.0 ms | 1.0 ms |
-| `share(5, 3)` | 12 µs | 11 µs | 12 µs | 11 µs |
-| secret `recover` (3 shares) | 2.5 µs | 3.3 µs | 2.6 µs | 2.4 µs |
-| signature aggregation (3 shares) | 0.65 ms | 0.67 ms | 0.65 ms | 0.64 ms |
+| Operation                        | 0.13.11 | 0.13.13 | 0.13.14 | 0.13.15    |
+| -------------------------------- | ------- | ------- | ------- | ---------- |
+| `sign`                           | 0.76 ms | 0.70 ms | 0.72 ms | 0.71 ms    |
+| `verify`                         | 176 ms  | 175 ms  | 170 ms  | **111 ms** |
+| `getRandomPointOnEt`             | 0.99 ms | 1.1 ms  | 1.0 ms  | 1.0 ms     |
+| `share(5, 3)`                    | 12 µs   | 11 µs   | 12 µs   | 11 µs      |
+| secret `recover` (3 shares)      | 2.5 µs  | 3.3 µs  | 2.6 µs  | 2.4 µs     |
+| signature aggregation (3 shares) | 0.65 ms | 0.67 ms | 0.65 ms | 0.64 ms    |
 
 BN254 performance was flat from 0.13.11 through 0.13.14 — in particular, the `alg-field`/`alg-bn` 0.1.x → 0.2.x upgrade (which rewrote the field tower to be curve-parameterized) cost nothing on the default-curve path. 0.13.15 restructured `verify` into a single product check `e(−sQ, H) · e(Q, sH) == 1` over a merged multi-Miller loop, sharing one squaring chain and one final exponentiation across both pairings instead of running two independent pairing computations.
 
 #### BLS12-381 (`BLSSigner.bls12381()`, added in 0.13.13)
 
-| Operation | 0.13.13 | 0.13.14 | 0.13.15 | 0.13.16 |
-| --- | --- | --- | --- | --- |
-| first `bls12381()` call (one-time) | 0.91 s | 0.95 s | 0.94 s | **~2 ms** |
-| `sign` | 0.73 ms | 0.77 ms | 0.75 ms | 0.75 ms |
-| `verify` | 3.36 s | 183 ms | **113 ms** | 112 ms |
-| signature aggregation (3 shares) | 0.69 ms | 0.68 ms | 0.69 ms | 0.69 ms |
+| Operation                          | 0.13.13 | 0.13.14 | 0.13.15    | 0.13.16   |
+| ---------------------------------- | ------- | ------- | ---------- | --------- |
+| first `bls12381()` call (one-time) | 0.91 s  | 0.95 s  | 0.94 s     | **~2 ms** |
+| `sign`                             | 0.73 ms | 0.77 ms | 0.75 ms    | 0.75 ms   |
+| `verify`                           | 3.36 s  | 183 ms  | **113 ms** | 112 ms    |
+| signature aggregation (3 shares)   | 0.69 ms | 0.68 ms | 0.69 ms    | 0.69 ms   |
 
 The 18x `verify` speedup in 0.13.14 comes from replacing the generic 4314-bit final exponentiation with the optimized easy-part/hard-part split (Hayashida–Hayasaka–Teruya decomposition over the cyclotomic subgroup); 0.13.15 adds the same merged single-product verify as BN254. Verification on the two curves is now equally fast (~110 ms). Signing and aggregation are scalar-multiplication-bound and unaffected.
 
