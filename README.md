@@ -30,6 +30,28 @@ const signature = secretKey.sign(H)
 signer.verify(Q, H, publicKey, signature) // true
 ```
 
+#### In the browser
+
+A self-contained UMD build (with `alg-field`/`alg-bn` inlined and no Node `crypto` dependency) is published alongside the package, so it can be loaded straight from a CDN — no build step:
+
+```html
+<script src="https://unpkg.com/bls-sign"></script>
+<script>
+  const { BLSSigner, BLSSecretKey, BLSPublicKey } = window['bls-sign']
+
+  const signer = new BLSSigner(256)
+  const Q = signer.G.multiply(4n)
+  const H = signer.getRandomPointOnEt()
+
+  const secretKey = new BLSSecretKey()
+  const publicKey = new BLSPublicKey(secretKey, Q)
+
+  console.log(signer.verify(Q, H, publicKey, secretKey.sign(H))) // true
+</script>
+```
+
+Pin a version for production (`https://unpkg.com/bls-sign@0.13.20/dist-web/index.js`); jsDelivr serves the same file. Bundlers pick this build up automatically through the `browser` field, which also avoids the Node `crypto` import that the main entry point uses.
+
 #### Using the BLS12-381 curve
 
 The default curve is alt_bn128 (BN254), matching Ethereum's precompiles. A signer over BLS12-381 (the curve used by Ethereum consensus, Zcash, Chia, and filecoin) works identically:

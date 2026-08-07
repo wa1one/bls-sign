@@ -1,11 +1,15 @@
 {
     "name": "bls-sign",
-    "version": "0.13.19",
+    "version": "0.13.20",
     "description": "BLS threshold signatures creation and verification",
     "main": "dist/index.js",
+    "browser": "dist-web/index.js",
+    "unpkg": "dist-web/index.js",
+    "jsdelivr": "dist-web/index.js",
     "jsnext:main": "main.mjs",
     "files": [
-        "dist"
+        "dist",
+        "dist-web"
     ],
     "scripts": {
         "test": "jest all.test.js",
