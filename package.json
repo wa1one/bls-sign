@@ -1,6 +1,6 @@
 {
     "name": "bls-sign",
-    "version": "0.13.20",
+    "version": "0.13.21",
     "description": "BLS threshold signatures creation and verification",
     "main": "dist/index.js",
     "browser": "dist-web/index.js",
@@ -40,6 +40,7 @@
         "globals": "^17.8.0",
         "jest": "^26.5.3",
         "regenerator-runtime": "^0.13.7",
+        "terser-webpack-plugin": "^5.6.1",
         "webpack": "^5.0.0",
         "webpack-cli": "^4.3.12"
     },
@@ -49,7 +50,7 @@
     },
     "homepage": "https://github.com/wa1one/bls-sign#readme",
     "dependencies": {
-        "alg-bn": "^0.3.0",
-        "alg-field": "^0.3.0"
+        "alg-bn": "^0.4.0",
+        "alg-field": "^0.3.1"
     }
 }
