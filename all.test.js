@@ -780,6 +780,60 @@ describe('Input validation', function () {
     })
 })
 
+describe('Secret key generation', function () {
+    const order = BN128Fp.n
+
+    test('generated secrets span the full scalar range, not a brute-forceable one', function () {
+        // Regression test: generation used to draw a single random byte, so
+        // the entire keyspace was 256 values and any key could be recovered
+        // by deriving the public key for every candidate.
+        const keys = Array.from({ length: 500 }, () => new BLSSecretKey().s)
+
+        // no value may be small enough to enumerate
+        for (const k of keys) {
+            expect(k).toBeGreaterThan(2n ** 128n)
+        }
+
+        // and the draws must not repeat, which a tiny keyspace guarantees
+        expect(new Set(keys).size).toBe(keys.length)
+    })
+
+    test('generated secrets are valid scalars in [1, order-1]', function () {
+        for (let i = 0; i < 200; i++) {
+            const s = new BLSSecretKey().s
+            expect(s).toBeGreaterThanOrEqual(1n)
+            expect(s).toBeLessThanOrEqual(order - 1n)
+        }
+    })
+
+    test('generation is roughly uniform rather than skewed to one end', function () {
+        const n = 2000
+        const half = order / 2n
+        const upper = Array.from(
+            { length: n },
+            () => new BLSSecretKey().s
+        ).filter((s) => s > half).length
+        // ~n/2 expected; a very wide band still catches a badly skewed or
+        // truncated generator without being flaky
+        expect(upper).toBeGreaterThan(n * 0.4)
+        expect(upper).toBeLessThan(n * 0.6)
+    })
+
+    test('sharing polynomial coefficients are full-width too', function () {
+        // A strong secret split with guessable coefficients would let an
+        // attacker brute-force them and solve for the secret from one share.
+        const msk = new BLSSecretKey().getMasterSecretKey(4)
+        for (const coefficient of msk.slice(1)) {
+            expect(coefficient.s).toBeGreaterThan(2n ** 128n)
+        }
+    })
+
+    test('an explicit secret is still used verbatim', function () {
+        expect(new BLSSecretKey(42).s).toEqual(42n)
+        expect(new BLSSecretKey(0).s).toEqual(0n)
+    })
+})
+
 describe('BLS12-381 curve', function () {
     const { BLS12Fp, BLS12Fp2 } = require('./src/pairing/BLS12381')
     const {

@@ -4,12 +4,28 @@ const { Parameters, Fp12 } = require('alg-field')
 const { BN128Fp, BN128Fp2 } = require('./pairing/BN128')
 const { PairingCheck } = require('./pairing/PairingCheck')
 
+/**
+ * Order that randomly generated scalars are drawn against.
+ *
+ * A secret key is a scalar in the curve's prime-order subgroup, so it has to
+ * be uniform over [1, order-1] to carry the group's full security. BN254's
+ * order is the smaller of the two curves supported here, so a scalar drawn
+ * against it is a valid, uniformly distributed key on either curve while
+ * still providing ~254 bits of entropy.
+ */
+const DEFAULT_SCALAR_ORDER = BN128Fp.n
+
 /** Secret Key */
 class BLSSecretKey {
-    constructor(s) {
+    /**
+     * With no argument, generates a uniformly random secret in
+     * [1, order-1]. Previously this drew a single random byte, giving only
+     * 256 possible keys - trivially brute-forced, since an attacker could
+     * simply derive the public key for every candidate and compare.
+     */
+    constructor(s, order = DEFAULT_SCALAR_ORDER) {
         if (s === undefined) {
-            const randomByte = crypto.randBytesSync(1)
-            this.s = BigInt(randomByte[0])
+            this.s = crypto.randBetween(order - 1n)
         } else {
             this.s = BigInt(s)
         }
@@ -115,8 +131,11 @@ class BLSPolynomial {
         this.c = new Array(k)
         this.c[0] = s
         for (let i = 1; i < this.c.length; i++) {
-            const s = crypto.randBytesSync(1)
-            this.c[i] = BigInt(s[0])
+            // Full-width coefficients: sharing a strong secret through a
+            // polynomial whose other coefficients are guessable would let an
+            // attacker brute-force them and solve for the secret from a
+            // single share.
+            this.c[i] = crypto.randBetween(DEFAULT_SCALAR_ORDER - 1n)
         }
     }
     static eval(msk, x) {

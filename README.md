@@ -114,6 +114,8 @@ The 18x `verify` speedup in 0.13.14 comes from replacing the generic 4314-bit fi
 
 In 0.13.16 the extension-tower parameters (non-residue and all Frobenius coefficients) are hardcoded rather than derived by brute-force search on first use, eliminating the ~0.9 s one-time `bls12381()` cost; a unit test re-runs the generic derivation and asserts it still matches the hardcoded constants.
 
+The `sign` figures above predate 0.13.23. Secret keys were one byte then, so scalar multiplication only had 8 bits to walk; with full-width 254-bit keys `sign` costs ~33 ms on both curves. That is the real price of the key size, not a regression — `verify` is unchanged, since the pairing dominates it.
+
 ### API
 
 #### `BLSSigner`
@@ -131,7 +133,7 @@ Holds the curve's fixed generator points and provides the top-level sign/verify 
 
 #### `BLSSecretKey`
 
-- `new BLSSecretKey(s)` — wraps a secret scalar. If `s` is omitted, generates a random one-byte secret (0-255).
+- `new BLSSecretKey(s, order)` — wraps a secret scalar. If `s` is omitted, generates a uniformly random secret in `[1, order-1]`, where `order` defaults to the BN254 subgroup order (~254 bits, and a valid scalar on either supported curve). Before 0.13.23 this drew a single random byte, giving a keyspace of 256 — see the security note below.
 - `.toString()`
 - `.getPublicKey(Q)` — derives this key's `BLSPublicKey` for generator `Q`.
 - `.sign(H)` — signs point `H`, returning a `BLSSignature`.
@@ -162,6 +164,16 @@ Internal helper backing the threshold-sharing methods above:
 #### `Parameters`
 
 Re-exported from `alg-field`: the curve's field parameters — `Parameters.p` (the base field prime) and `Parameters.n` (the curve/group order).
+
+### Security notes
+
+**Key generation.** Up to and including 0.13.22, `new BLSSecretKey()` drew a single random byte, so there were only 256 possible keys — an attacker could derive the public key for every candidate and recover any secret instantly. Since 0.13.23 keys are drawn uniformly from `[1, order-1]` (~254 bits), as are the sharing polynomial's coefficients. **If you generated keys with an earlier version, treat them as compromised and reissue them.**
+
+**Message encoding.** `getRandomPointOnEt()` is a convenience for demos and tests, not a hash-to-curve. Mapping a message to a curve point safely requires a proper hash-to-curve construction (RFC 9380); this package does not provide one, so signatures over attacker-influenced messages are not covered by the usual security argument.
+
+**No encryption.** BLS is a signature scheme: it authenticates messages, it does not hide them. There is no encrypt/decrypt here, and the pairing should not be improvised into one.
+
+**Not audited.** This is a from-scratch implementation maintained for learning and experimentation. It has had no third-party cryptographic review, and the pairing and threshold code have both carried real correctness bugs found only recently. For production use prefer an audited library such as `@noble/curves` or `blst`.
 
 ### The Scheme
 
